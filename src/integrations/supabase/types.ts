@@ -14,7 +14,211 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          bedrooms: number
+          budget: string
+          created_at: string
+          id: string
+          levels: number
+          surface: number
+          user_id: string
+          variants: Json
+        }
+        Insert: {
+          bedrooms: number
+          budget: string
+          created_at?: string
+          id?: string
+          levels: number
+          surface: number
+          user_id: string
+          variants?: Json
+        }
+        Update: {
+          bedrooms?: number
+          budget?: string
+          created_at?: string
+          id?: string
+          levels?: number
+          surface?: number
+          user_id?: string
+          variants?: Json
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          agency_name: string | null
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          agency_name?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          agency_name?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          position: number
+          status: string
+          tag: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          position?: number
+          status?: string
+          tag?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          position?: number
+          status?: string
+          tag?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      renders: {
+        Row: {
+          ambiance: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          project_id: string | null
+          prompt: string | null
+          reference_url: string | null
+          status: string
+          style: string | null
+          user_id: string
+          weather: string | null
+        }
+        Insert: {
+          ambiance?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          project_id?: string | null
+          prompt?: string | null
+          reference_url?: string | null
+          status?: string
+          style?: string | null
+          user_id: string
+          weather?: string | null
+        }
+        Update: {
+          ambiance?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          project_id?: string | null
+          prompt?: string | null
+          reference_url?: string | null
+          status?: string
+          style?: string | null
+          user_id?: string
+          weather?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
