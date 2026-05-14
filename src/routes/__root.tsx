@@ -74,14 +74,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Forma" },
+      { name: "description", content: "FORMA is a SaaS platform for architects, integrating AI rendering and an AI agent." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Forma" },
+      { property: "og:description", content: "FORMA is a SaaS platform for architects, integrating AI rendering and an AI agent." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Forma" },
+      { name: "twitter:description", content: "FORMA is a SaaS platform for architects, integrating AI rendering and an AI agent." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/cdY8YZaTpwcFDmkQ6giVhTU70Dp1/social-images/social-1778761669262-ChatGPT_Image_14_mai_2026,_14_26_50.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/cdY8YZaTpwcFDmkQ6giVhTU70Dp1/social-images/social-1778761669262-ChatGPT_Image_14_mai_2026,_14_26_50.webp" },
     ],
     links: [
       {
