@@ -47,28 +47,31 @@ async function generateImageBase64(prompt: string, referenceUrl?: string | null)
   return url; // data URL
 }
 
+async function persistImage(
+  supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>,
+  userId: string,
+  dataUrl: string,
+): Promise<string> {
+  const base64 = dataUrl.split(",")[1];
+  const buffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const path = `${userId}/${crypto.randomUUID()}.png`;
+  const { error: upErr } = await supabase.storage.from("renders").upload(path, buffer, {
+    contentType: "image/png",
+    upsert: false,
+  });
+  if (upErr) throw new Error("Upload storage: " + upErr.message);
+  const { data: pub } = supabase.storage.from("renders").getPublicUrl(path);
+  return pub.publicUrl;
+}
+
 export const generateRender = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => RenderSchema.parse(data))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-
     const fullPrompt = `Rendu architectural photoréaliste, ambiance ${data.ambiance}, météo ${data.weather}, style ${data.style}. ${data.prompt}. Haute qualité, lumière cinématographique, détails fins, perspective architecturale professionnelle.`;
-
     const dataUrl = await generateImageBase64(fullPrompt, data.referenceUrl);
-
-    // upload to storage
-    const base64 = dataUrl.split(",")[1];
-    const buffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const path = `${userId}/${crypto.randomUUID()}.png`;
-    const { error: upErr } = await supabase.storage.from("renders").upload(path, buffer, {
-      contentType: "image/png",
-      upsert: false,
-    });
-    if (upErr) throw new Error("Upload storage: " + upErr.message);
-
-    const { data: pub } = supabase.storage.from("renders").getPublicUrl(path);
-    const imageUrl = pub.publicUrl;
+    const imageUrl = await persistImage(supabase as never, userId, dataUrl);
 
     const { data: row, error: insErr } = await supabase
       .from("renders")
@@ -85,7 +88,45 @@ export const generateRender = createServerFn({ method: "POST" })
       .select()
       .single();
     if (insErr) throw new Error(insErr.message);
+    return { id: row.id, imageUrl };
+  });
 
+const EditSchema = z.object({
+  renderId: z.string().uuid(),
+  instruction: z.string().min(1).max(2000),
+});
+
+export const editRender = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => EditSchema.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: src, error } = await supabase
+      .from("renders")
+      .select("*")
+      .eq("id", data.renderId)
+      .single();
+    if (error || !src?.image_url) throw new Error("Rendu introuvable");
+
+    const prompt = `Modifie ce rendu architectural photoréaliste selon cette instruction: ${data.instruction}. Conserve la cohérence architecturale, le cadrage et la qualité photoréaliste.`;
+    const dataUrl = await generateImageBase64(prompt, src.image_url);
+    const imageUrl = await persistImage(supabase as never, userId, dataUrl);
+
+    const { data: row, error: insErr } = await supabase
+      .from("renders")
+      .insert({
+        user_id: userId,
+        prompt: `[Édition] ${data.instruction} (basé sur ${src.prompt ?? "rendu précédent"})`,
+        ambiance: src.ambiance,
+        weather: src.weather,
+        style: src.style,
+        reference_url: src.image_url,
+        image_url: imageUrl,
+        status: "done",
+      })
+      .select()
+      .single();
+    if (insErr) throw new Error(insErr.message);
     return { id: row.id, imageUrl };
   });
 

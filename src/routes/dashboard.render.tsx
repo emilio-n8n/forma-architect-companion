@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Upload, Sun, Moon, Wand2, Loader2, ImageIcon } from "lucide-react";
+import { Upload, Sun, Moon, Wand2, Loader2, ImageIcon, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { generateRender, listRenders } from "@/lib/render.functions";
+import { generateRender, listRenders, editRender } from "@/lib/render.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/dashboard/render")({
   component: RenderPage,
@@ -28,7 +29,11 @@ function RenderPage() {
 
   const generate = useServerFn(generateRender);
   const list = useServerFn(listRenders);
+  const editFn = useServerFn(editRender);
   const qc = useQueryClient();
+
+  const [editing, setEditing] = useState<{ id: string; image: string } | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
 
   const renders = useQuery({ queryKey: ["renders"], queryFn: () => list() });
   const mutation = useMutation({
@@ -38,6 +43,18 @@ function RenderPage() {
       }),
     onSuccess: () => {
       toast.success("Rendu généré");
+      qc.invalidateQueries({ queryKey: ["renders"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (vars: { renderId: string; instruction: string }) =>
+      editFn({ data: vars }),
+    onSuccess: () => {
+      toast.success("Rendu édité");
+      setEditing(null);
+      setEditPrompt("");
       qc.invalidateQueries({ queryKey: ["renders"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -161,20 +178,63 @@ function RenderPage() {
         ) : renders.data && renders.data.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {renders.data.map((r) => (
-              <a key={r.id} href={r.image_url ?? "#"} target="_blank" rel="noreferrer"
-                className="aspect-square bg-muted border border-border/40 hover:border-primary/60 transition-colors rounded overflow-hidden block">
+              <div key={r.id} className="group relative aspect-square bg-muted border border-border/40 hover:border-primary/60 transition-colors rounded overflow-hidden">
                 {r.image_url ? (
-                  <img src={r.image_url} alt={r.prompt ?? ""} className="w-full h-full object-cover" />
+                  <a href={r.image_url} target="_blank" rel="noreferrer" className="block w-full h-full">
+                    <img src={r.image_url} alt={r.prompt ?? ""} className="w-full h-full object-cover" />
+                  </a>
                 ) : (
                   <div className="flex items-center justify-center h-full"><ImageIcon className="text-primary/30" /></div>
                 )}
-              </a>
+                {r.image_url && (
+                  <button
+                    onClick={() => { setEditing({ id: r.id, image: r.image_url! }); setEditPrompt(""); }}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 border border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground text-xs px-2 py-1 rounded-md flex items-center gap-1"
+                  >
+                    <Pencil className="h-3 w-3" /> Éditer
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Aucun rendu pour l'instant.</p>
         )}
       </div>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="bg-card border-border/40">
+          <DialogHeader>
+            <DialogTitle className="font-display">Éditer le rendu</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4">
+              <img src={editing.image} alt="rendu" className="w-full rounded border border-border/40" />
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Instruction de modification</p>
+                <Textarea
+                  value={editPrompt}
+                  onChange={(e) => setEditPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="Ex: ajouter une piscine en premier plan, changer la façade en pierre, ambiance crépusculaire…"
+                  className="bg-background"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} className="border-primary/30">Annuler</Button>
+            <Button
+              disabled={!editPrompt.trim() || editMutation.isPending}
+              onClick={() => editing && editMutation.mutate({ renderId: editing.id, instruction: editPrompt.trim() })}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {editMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
+              Appliquer la modification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
