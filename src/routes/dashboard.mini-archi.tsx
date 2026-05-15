@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { generatePlans, listPlans, type PlanVariant } from "@/lib/plans.functions";
+import { generatePlans, listPlans, generate2DPlan, type PlanVariant } from "@/lib/plans.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/mini-archi")({
@@ -19,9 +19,11 @@ function MiniArchiPage() {
   const [bedrooms, setBedrooms] = useState(3);
   const [levels, setLevels] = useState(1);
   const [budget, setBudget] = useState<"Économique" | "Moyen de gamme" | "Haut de gamme">("Moyen de gamme");
+  const [pendingPlanIdx, setPendingPlanIdx] = useState<number | null>(null);
 
   const gen = useServerFn(generatePlans);
   const list = useServerFn(listPlans);
+  const gen2d = useServerFn(generate2DPlan);
   const qc = useQueryClient();
 
   const plans = useQuery({ queryKey: ["plans"], queryFn: () => list() });
@@ -29,6 +31,12 @@ function MiniArchiPage() {
     mutationFn: () => gen({ data: { surface, bedrooms, levels, budget } }),
     onSuccess: () => { toast.success("Plans générés"); qc.invalidateQueries({ queryKey: ["plans"] }); },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const plan2dMutation = useMutation({
+    mutationFn: (vars: { planId: string; variantIndex: number }) => gen2d({ data: vars }),
+    onSuccess: () => { toast.success("Plan 2D généré"); qc.invalidateQueries({ queryKey: ["plans"] }); setPendingPlanIdx(null); },
+    onError: (e: Error) => { toast.error(e.message); setPendingPlanIdx(null); },
   });
 
   const last = plans.data?.[0];
