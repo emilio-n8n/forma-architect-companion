@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Upload, Sun, Moon, Wand2, Loader2, ImageIcon } from "lucide-react";
+import { Upload, Sun, Moon, Wand2, Loader2, ImageIcon, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { generateRender, listRenders } from "@/lib/render.functions";
+import { generateRender, listRenders, editRender } from "@/lib/render.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/dashboard/render")({
   component: RenderPage,
@@ -28,7 +29,11 @@ function RenderPage() {
 
   const generate = useServerFn(generateRender);
   const list = useServerFn(listRenders);
+  const editFn = useServerFn(editRender);
   const qc = useQueryClient();
+
+  const [editing, setEditing] = useState<{ id: string; image: string } | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
 
   const renders = useQuery({ queryKey: ["renders"], queryFn: () => list() });
   const mutation = useMutation({
@@ -38,6 +43,18 @@ function RenderPage() {
       }),
     onSuccess: () => {
       toast.success("Rendu généré");
+      qc.invalidateQueries({ queryKey: ["renders"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (vars: { renderId: string; instruction: string }) =>
+      editFn({ data: vars }),
+    onSuccess: () => {
+      toast.success("Rendu édité");
+      setEditing(null);
+      setEditPrompt("");
       qc.invalidateQueries({ queryKey: ["renders"] });
     },
     onError: (e: Error) => toast.error(e.message),
