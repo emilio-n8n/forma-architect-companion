@@ -86,12 +86,31 @@ function MiniArchiPage() {
                   <li key={j} className="flex gap-2"><Home className="h-3 w-3 text-primary/60 mt-0.5 shrink-0" /> {f}</li>
                 ))}
               </ul>
-              <div className="border-t border-border/30 pt-3 flex items-center justify-between">
+              <div className="border-t border-border/30 pt-3 flex items-center justify-between mb-3">
                 <span className="text-xs text-muted-foreground">Estimation</span>
                 <span className="text-sm text-primary font-display">
                   {new Intl.NumberFormat("fr-FR").format(v.estimated_cost_eur)} €
                 </span>
               </div>
+              {v.plan_2d_url ? (
+                <a href={v.plan_2d_url} target="_blank" rel="noreferrer" className="block border border-border/40 rounded overflow-hidden hover:border-primary/60 transition-colors">
+                  <img src={v.plan_2d_url} alt={`Plan 2D ${v.name}`} className="w-full bg-white" />
+                </a>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!last || (plan2dMutation.isPending && pendingPlanIdx === i)}
+                  onClick={() => { setPendingPlanIdx(i); plan2dMutation.mutate({ planId: last!.id, variantIndex: i }); }}
+                  className="w-full border-primary/30 hover:bg-primary/10 hover:text-primary"
+                >
+                  {plan2dMutation.isPending && pendingPlanIdx === i ? (
+                    <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Génération du plan 2D…</>
+                  ) : (
+                    <><Ruler className="h-3.5 w-3.5 mr-2" /> Générer le plan 2D</>
+                  )}
+                </Button>
+              )}
             </Card>
           ))}
         </div>
