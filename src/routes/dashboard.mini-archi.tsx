@@ -1,13 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { generatePlans, listPlans, generate2DPlan, type PlanVariant } from "@/lib/plans.functions";
+import {
+  generatePlans,
+  listPlans,
+  generate2DPlanData,
+  updatePlan2DData,
+  confirm2DPlan,
+  type PlanVariant,
+  type PlanData,
+} from "@/lib/plans.functions";
+import { planToSvgString, planToDxfString, downloadBlob } from "@/lib/plan-export";
+import { Plan2DEditor } from "@/components/Plan2DEditor";
+import { Plan3DViewer } from "@/components/Plan3DViewer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/mini-archi")({
@@ -19,11 +32,12 @@ function MiniArchiPage() {
   const [bedrooms, setBedrooms] = useState(3);
   const [levels, setLevels] = useState(1);
   const [budget, setBudget] = useState<"Économique" | "Moyen de gamme" | "Haut de gamme">("Moyen de gamme");
-  const [pendingPlanIdx, setPendingPlanIdx] = useState<number | null>(null);
+  const [openVariant, setOpenVariant] = useState<number | null>(null);
+  const [pendingGen, setPendingGen] = useState<number | null>(null);
 
   const gen = useServerFn(generatePlans);
   const list = useServerFn(listPlans);
-  const gen2d = useServerFn(generate2DPlan);
+  const gen2d = useServerFn(generate2DPlanData);
   const qc = useQueryClient();
 
   const plans = useQuery({ queryKey: ["plans"], queryFn: () => list() });
@@ -35,8 +49,13 @@ function MiniArchiPage() {
 
   const plan2dMutation = useMutation({
     mutationFn: (vars: { planId: string; variantIndex: number }) => gen2d({ data: vars }),
-    onSuccess: () => { toast.success("Plan 2D généré"); qc.invalidateQueries({ queryKey: ["plans"] }); setPendingPlanIdx(null); },
-    onError: (e: Error) => { toast.error(e.message); setPendingPlanIdx(null); },
+    onSuccess: (_d, vars) => {
+      toast.success("Plan 2D structuré généré");
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      setPendingGen(null);
+      setOpenVariant(vars.variantIndex);
+    },
+    onError: (e: Error) => { toast.error(e.message); setPendingGen(null); },
   });
 
   const last = plans.data?.[0];
@@ -47,7 +66,7 @@ function MiniArchiPage() {
       <div className="mb-8">
         <p className="text-xs uppercase tracking-[0.3em] text-primary mb-1">Mini Archi</p>
         <h1 className="font-display text-3xl">Génération de plans par IA</h1>
-        <p className="text-sm text-muted-foreground mt-1">6 variantes, conformité RE2020, estimation budget France 2026.</p>
+        <p className="text-sm text-muted-foreground mt-1">6 variantes — plans 2D structurés exportables (SVG/DXF), vue 3D générée après validation.</p>
       </div>
 
       <Card className="p-6 bg-card border-border/40 mb-8">
@@ -92,22 +111,26 @@ function MiniArchiPage() {
                   {new Intl.NumberFormat("fr-FR").format(v.estimated_cost_eur)} €
                 </span>
               </div>
-              {v.plan_2d_url ? (
-                <a href={v.plan_2d_url} target="_blank" rel="noreferrer" className="block border border-border/40 rounded overflow-hidden hover:border-primary/60 transition-colors">
-                  <img src={v.plan_2d_url} alt={`Plan 2D ${v.name}`} className="w-full bg-white" />
-                </a>
+              {v.plan_2d_data ? (
+                <div className="space-y-2">
+                  <Button size="sm" variant="outline" className="w-full border-primary/30 hover:bg-primary/10 hover:text-primary"
+                    onClick={() => setOpenVariant(i)}>
+                    <Pencil className="h-3.5 w-3.5 mr-2" /> Ouvrir le plan
+                    {v.plan_2d_data.confirmed && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}
+                  </Button>
+                </div>
               ) : (
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!last || (plan2dMutation.isPending && pendingPlanIdx === i)}
-                  onClick={() => { setPendingPlanIdx(i); plan2dMutation.mutate({ planId: last!.id, variantIndex: i }); }}
+                  disabled={!last || (plan2dMutation.isPending && pendingGen === i)}
+                  onClick={() => { setPendingGen(i); plan2dMutation.mutate({ planId: last!.id, variantIndex: i }); }}
                   className="w-full border-primary/30 hover:bg-primary/10 hover:text-primary"
                 >
-                  {plan2dMutation.isPending && pendingPlanIdx === i ? (
-                    <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Génération du plan 2D…</>
+                  {plan2dMutation.isPending && pendingGen === i ? (
+                    <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Génération…</>
                   ) : (
-                    <><Ruler className="h-3.5 w-3.5 mr-2" /> Générer le plan 2D</>
+                    <><Ruler className="h-3.5 w-3.5 mr-2" /> Générer plan 2D</>
                   )}
                 </Button>
               )}
@@ -117,6 +140,117 @@ function MiniArchiPage() {
       ) : (
         <p className="text-sm text-muted-foreground">Lancez une génération pour voir 6 variantes architecturales.</p>
       )}
+
+      {openVariant !== null && last && variants[openVariant]?.plan_2d_data && (
+        <PlanDialog
+          planId={last.id}
+          variantIndex={openVariant}
+          variant={variants[openVariant]}
+          onClose={() => setOpenVariant(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PlanDialog({
+  planId,
+  variantIndex,
+  variant,
+  onClose,
+}: {
+  planId: string;
+  variantIndex: number;
+  variant: PlanVariant;
+  onClose: () => void;
+}) {
+  const initial = variant.plan_2d_data!;
+  const [draft, setDraft] = useState<PlanData>(initial);
+  const [tab, setTab] = useState<"2d" | "3d">(initial.confirmed ? "3d" : "2d");
+  const qc = useQueryClient();
+  const update = useServerFn(updatePlan2DData);
+  const confirm = useServerFn(confirm2DPlan);
+
+  const saveMut = useMutation({
+    mutationFn: () => update({ data: { planId, variantIndex, planData: draft } }),
+    onSuccess: () => { toast.success("Plan enregistré"); qc.invalidateQueries({ queryKey: ["plans"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const confirmMut = useMutation({
+    mutationFn: async () => {
+      await update({ data: { planId, variantIndex, planData: draft } });
+      return confirm({ data: { planId, variantIndex } });
+    },
+    onSuccess: () => {
+      toast.success("Plan 2D validé — vue 3D disponible");
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      setDraft({ ...draft, confirmed: true });
+      setTab("3d");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-6xl bg-card border-border/40">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl">{variant.name}</DialogTitle>
+          <DialogDescription>{variant.concept}</DialogDescription>
+        </DialogHeader>
+
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "2d" | "3d")}>
+          <TabsList>
+            <TabsTrigger value="2d"><Ruler className="h-3.5 w-3.5 mr-2" /> Plan 2D{draft.confirmed && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}</TabsTrigger>
+            <TabsTrigger value="3d" disabled={!draft.confirmed}><Box className="h-3.5 w-3.5 mr-2" /> Vue 3D</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="2d" className="mt-4">
+            <Plan2DEditor plan={draft} editable onChange={setDraft} />
+            <div className="flex flex-wrap gap-2 mt-4 justify-between">
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => downloadBlob(planToSvgString(draft), `${variant.name}.svg`, "image/svg+xml")}>
+                  <Download className="h-3.5 w-3.5 mr-2" /> SVG
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => downloadBlob(planToDxfString(draft), `${variant.name}.dxf`, "application/dxf")}>
+                  <Download className="h-3.5 w-3.5 mr-2" /> DXF (AutoCAD/Revit)
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+                  {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : null}
+                  Enregistrer
+                </Button>
+                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>
+                  {confirmMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-2" />}
+                  Valider & générer la 3D
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="3d" className="mt-4">
+            {draft.confirmed ? (
+              <>
+                <Plan3DViewer plan={draft} />
+                <p className="text-xs text-muted-foreground mt-2">Vue 3D générée à partir du plan 2D validé (murs h. 2.7m, RE2020). Clic + glisser pour orbiter.</p>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" variant="outline" onClick={() => setTab("2d")}>
+                    <Pencil className="h-3.5 w-3.5 mr-2" /> Modifier le 2D
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Validez le plan 2D pour générer la 3D.</p>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Fermer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
