@@ -38,7 +38,7 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   // States for interactive features
-  // 1. Render AI Before/After Slider
+  // 1. Render AI Before/After Slider (Bento)
   const [sliderPos, setSliderPos] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +58,28 @@ function Landing() {
     const x = touch.clientX - rect.left;
     const percentage = Math.min(Math.max((x / rect.width) * 100, 0), 100);
     setSliderPos(percentage);
+  };
+
+  // 1b. Hero Before/After Slider
+  const [heroSliderPos, setHeroSliderPos] = useState(50);
+  const heroContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleHeroMouseMove = (e: React.MouseEvent) => {
+    if (!heroContainerRef.current) return;
+    const rect = heroContainerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = Math.min(Math.max((x / rect.width) * 100, 0), 100);
+    setHeroSliderPos(percentage);
+  };
+
+  const handleHeroTouchMove = (e: React.TouchEvent) => {
+    if (!heroContainerRef.current) return;
+    const rect = heroContainerRef.current.getBoundingClientRect();
+    const touch = e.touches[0];
+    if (!touch) return;
+    const x = touch.clientX - rect.left;
+    const percentage = Math.min(Math.max((x / rect.width) * 100, 0), 100);
+    setHeroSliderPos(percentage);
   };
 
   // 2. Chat Agent Auto-Typer Simulator
@@ -205,27 +227,63 @@ function Landing() {
           </a>
         </div>
 
-        {/* Majestic Villa Hero Visual */}
+        {/* Majestic Villa Hero Visual -> Interactive Cabin Before/After Slider */}
         <div className="w-full relative group">
           <div className="absolute -inset-2 rounded-xl bg-gradient-to-r from-primary/10 to-primary/0 blur-xl opacity-75 group-hover:opacity-100 transition duration-1000" />
           <div className="relative border border-primary/20 bg-background/50 p-2 backdrop-blur-sm shadow-2xl rounded-lg overflow-hidden">
-            <div className="relative aspect-[21/9] w-full overflow-hidden rounded-md border border-border/40">
-              <img
-                src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=90"
-                alt="Architecture de luxe par FORMA"
-                className="w-full h-full object-cover grayscale-[20%] contrast-[110%] scale-100 group-hover:scale-105 transition-transform duration-[4000ms] ease-out"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60" />
+            <div
+              ref={heroContainerRef}
+              onMouseMove={handleHeroMouseMove}
+              onTouchMove={handleHeroTouchMove}
+              className="relative aspect-[21/9] w-full overflow-hidden rounded-md border border-border/40 select-none cursor-ew-resize"
+            >
+              {/* Before: Sketch Image */}
+              <div className="absolute inset-0 z-0 bg-[#0d0f12]">
+                <img
+                  src="/sketch.jpg"
+                  alt="Esquisse originale"
+                  className="w-full h-full object-cover filter brightness-95"
+                />
+                <div className="absolute top-4 left-4 border border-primary/20 bg-background/90 px-3 py-1.5 text-[9px] font-mono text-primary max-w-max">
+                  AVANT · ESQUISSE D'INTENTION
+                </div>
+              </div>
+
+              {/* After: Color Render Image */}
+              <div
+                className="absolute inset-y-0 left-0 right-0 z-10 overflow-hidden bg-cover bg-center transition-all duration-75"
+                style={{ clipPath: `polygon(0 0, ${heroSliderPos}% 0, ${heroSliderPos}% 100%, 0 100%)` }}
+              >
+                <img
+                  src="/render.jpg"
+                  alt="Rendu finalisé"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent opacity-60 pointer-events-none" />
+                <div className="absolute top-4 left-4 border border-emerald-500/20 bg-emerald-950/90 px-3 py-1.5 text-[9px] font-mono text-emerald-400 max-w-max">
+                  APRÈS · RENDU PHOTORÉALISTE PAR FORMA
+                </div>
+              </div>
+
+              {/* Slider Handle Line */}
+              <div
+                className="absolute inset-y-0 z-20 w-0.5 bg-primary/80 transition-all duration-75"
+                style={{ left: `${heroSliderPos}%` }}
+              >
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-9 w-9 rounded-full border border-primary bg-background flex items-center justify-center shadow-lg cursor-ew-resize">
+                  <Maximize2 className="h-3.5 w-3.5 text-primary rotate-45" />
+                </div>
+              </div>
               
               {/* Floating Architectural Blueprint overlay card */}
-              <div className="absolute bottom-6 left-6 right-6 md:right-auto md:max-w-md bg-background/80 backdrop-blur-md p-6 border border-primary/20 text-left transition-all duration-500 hover:border-primary/50">
+              <div className="absolute bottom-6 right-6 z-30 bg-background/90 backdrop-blur-md p-6 border border-primary/20 text-left transition-all duration-500 hover:border-primary/50 max-w-sm pointer-events-none md:pointer-events-auto">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-[9px] uppercase tracking-widest text-primary font-medium">Bâtiment Réf. 09-026</span>
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
                 </div>
                 <h3 className="font-display text-xl mb-1 text-foreground">Villa Horizon - Bioclimatique</h3>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Modèle d'expérimentation généré à l'aide de l'IA avec isolation paille, panneaux solaires intégrés en façade sud, et respect des alignements réglementaires PLU Zone UBa.
+                  Modèle d'expérimentation d'une villa bioclimatique modulaire à ossature bois noble (cèdre) généré par Render AI à partir de plans d'intentions filaires 2D. Conçue avec isolation biosourcée haute performance et implantée face à l'océan.
                 </p>
               </div>
             </div>
@@ -270,17 +328,18 @@ function Landing() {
                 onTouchMove={handleTouchMove}
                 className="w-full aspect-[16/9] bg-[#0c0c0c] border border-border/40 relative overflow-hidden select-none cursor-ew-resize rounded"
               >
-                {/* Before Image (Blueprint styling) */}
+                {/* Before Image (Blueprint sketch) */}
                 <div className="absolute inset-0 z-0 bg-[#0d0f12]">
-                  {/* Grid Lines simulating blueprint */}
-                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#141c2b_1px,transparent_1px),linear-gradient(to_bottom,#141c2b_1px,transparent_1px)] bg-[size:40px_40px] opacity-60" />
-                  <div className="absolute inset-0 flex items-center justify-center p-8 opacity-25">
-                    <Building className="w-1/2 h-1/2 text-primary" />
-                  </div>
+                  <img
+                    src="/sketch.jpg"
+                    alt="Esquisse d'intention"
+                    className="w-full h-full object-cover filter brightness-95"
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(196,162,100,0.1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(196,162,100,0.1)_1px,transparent_1px)] bg-[size:30px_30px]" />
                   <div className="absolute inset-0 flex flex-col justify-between p-6">
-                    <span className="text-[10px] text-primary/70 font-mono tracking-widest">FILAIRE.DXF</span>
+                    <span className="text-[10px] text-primary/70 font-mono tracking-widest">CROQUIS_FILAIRE.DXF</span>
                     <div className="border border-primary/20 bg-background/90 px-3 py-1.5 text-[10px] font-mono text-primary max-w-max">
-                      STRUCTURE 3D VECTORIELLE
+                      ESQUISSE 2D ORIGINALE
                     </div>
                   </div>
                 </div>
@@ -291,13 +350,13 @@ function Landing() {
                   style={{ clipPath: `polygon(0 0, ${sliderPos}% 0, ${sliderPos}% 100%, 0 100%)` }}
                 >
                   <img
-                    src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80"
+                    src="/render.jpg"
                     alt="Rendu finalisé"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
                   <div className="absolute inset-0 flex flex-col justify-between p-6">
-                    <span className="text-[10px] text-white/70 font-mono tracking-widest">RENDU_FINAL.PNG</span>
+                    <span className="text-[10px] text-white/70 font-mono tracking-widest">RENDU_PHOTORÉALISTE.PNG</span>
                     <div className="border border-emerald-500/20 bg-emerald-950/80 px-3 py-1.5 text-[10px] font-mono text-emerald-400 max-w-max">
                       PHOTORÉALISME RE2020
                     </div>
