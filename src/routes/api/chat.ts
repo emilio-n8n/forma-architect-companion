@@ -1,7 +1,7 @@
 import "@tanstack/react-start";
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway";
+import { createCerebrasProvider } from "@/lib/ai-gateway";
 
 const SYSTEM_PROMPT = `Tu es FORMA Agent, un assistant IA spécialisé en architecture française.
 Tu maîtrises le PLU, la RT/RE2020, le label BBC, les normes d'accessibilité PMR,
@@ -17,14 +17,15 @@ export const Route = createFileRoute("/api/chat")({
         if (!Array.isArray(messages)) {
           return new Response("messages required", { status: 400 });
         }
-        const key = process.env.LOVABLE_API_KEY;
-        if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const key = process.env.CEREBRAS_API_KEY;
+        if (!key) return new Response("Missing CEREBRAS_API_KEY", { status: 500 });
 
-        const gateway = createLovableAiGatewayProvider(key);
+        const cerebras = createCerebrasProvider();
         const result = streamText({
-          model: gateway("google/gemini-3-flash-preview"),
+          model: cerebras("cerebras-gpt-oss-120b"),
           system: SYSTEM_PROMPT,
           messages: await convertToModelMessages(messages),
+          headers: { Authorization: `Bearer ${key}` },
         });
         return result.toUIMessageStreamResponse({ originalMessages: messages });
       },

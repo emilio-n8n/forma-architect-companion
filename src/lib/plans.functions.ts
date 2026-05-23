@@ -40,13 +40,13 @@ export type PlanVariant = {
 };
 
 async function callJSON<T>(prompt: string, system: string): Promise<T> {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY missing");
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const key = process.env.CEREBRAS_API_KEY;
+  if (!key) throw new Error("CEREBRAS_API_KEY missing");
+  const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "cerebras-gpt-oss-120b",
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
@@ -55,9 +55,10 @@ async function callJSON<T>(prompt: string, system: string): Promise<T> {
     }),
   });
   if (!res.ok) {
+    const text = await res.text();
     if (res.status === 429) throw new Error("Limite de requêtes atteinte.");
     if (res.status === 402) throw new Error("Crédits IA épuisés.");
-    throw new Error("Erreur IA: " + res.status);
+    throw new Error("Erreur IA " + res.status + ": " + text.slice(0, 200));
   }
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const text = json.choices?.[0]?.message?.content ?? "{}";
