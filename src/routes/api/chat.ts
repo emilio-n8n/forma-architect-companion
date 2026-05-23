@@ -116,7 +116,7 @@ export const Route = createFileRoute("/api/chat")({
           messages: await convertToModelMessages(messages),
           headers: { Authorization: `Bearer ${key}` },
         });
-        return result.toUIMessageStreamResponse({ originalMessages: messages });
+        return result.toDataStreamResponse();
       },
     },
   },
