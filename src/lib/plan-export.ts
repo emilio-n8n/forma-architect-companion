@@ -3,12 +3,12 @@ import type { PlanData, Room, Opening } from "@/lib/plans.functions";
 const fmt = (n: number) => n.toFixed(3);
 
 /** Build inner SVG markup (without <svg> wrapper) — used for both DOM render & export. */
-export function planToSvgInner(plan: PlanData, scale = 50): string {
+export function planToSvgInner(plan: PlanData, scale = 50, floor?: number): string {
   const W = plan.total_w * scale;
   const H = plan.total_h * scale;
   const wallStroke = 6;
 
-  const rooms = plan.rooms
+  const rooms = (floor ? plan.rooms.filter((r) => (r.floor ?? 1) === floor) : plan.rooms)
     .map((r) => {
       const x = r.x * scale;
       const y = r.y * scale;
@@ -61,18 +61,22 @@ function openingSvg(o: Opening, rooms: Room[], scale: number): string {
   return `<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="${color}" stroke-width="8" stroke-linecap="butt"/>`;
 }
 
-export function planToSvgString(plan: PlanData, scale = 50): string {
+export function planToSvgString(plan: PlanData, scale = 50, floor?: number): string {
   const W = plan.total_w * scale;
   const H = plan.total_h * scale;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(W)} ${fmt(H)}" width="${fmt(W)}" height="${fmt(H)}">
-${planToSvgInner(plan, scale)}
+${planToSvgInner(plan, scale, floor)}
 </svg>`;
 }
 
 /** Minimal DXF (R12 ASCII) — LINE entities for walls + TEXT labels.
  *  Compatible with AutoCAD, BricsCAD, ArchiCAD, Revit (import), LibreCAD. */
-export function planToDxfString(plan: PlanData): string {
+export function planToDxfString(plan: PlanData, floor?: number): string {
+  const rooms = floor ? plan.rooms.filter((r) => (r.floor ?? 1) === floor) : plan.rooms;
+  const openings = floor
+    ? plan.openings.filter((o) => rooms.some((r) => r.id === o.room_id))
+    : plan.openings;
   const lines: string[] = [];
   const pushLine = (x1: number, y1: number, x2: number, y2: number, layer = "WALLS") => {
     // DXF Y up — flip Y around total_h.
@@ -93,7 +97,7 @@ export function planToDxfString(plan: PlanData): string {
     );
   };
 
-  for (const r of plan.rooms) {
+  for (const r of rooms) {
     pushLine(r.x, r.y, r.x + r.w, r.y);
     pushLine(r.x + r.w, r.y, r.x + r.w, r.y + r.h);
     pushLine(r.x + r.w, r.y + r.h, r.x, r.y + r.h);
@@ -102,8 +106,8 @@ export function planToDxfString(plan: PlanData): string {
     pushText(r.x + 0.1, r.y + 0.1, `${(r.w * r.h).toFixed(2)} m2`, 0.18);
   }
   // Openings on OPENINGS layer (overwrite wall segment visually in CAD)
-  for (const o of plan.openings) {
-    const r = plan.rooms.find((x) => x.id === o.room_id);
+  for (const o of openings) {
+    const r = rooms.find((x) => x.id === o.room_id);
     if (!r) continue;
     let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
     if (o.wall === "N") { x1 = r.x + o.offset; y1 = r.y; x2 = x1 + o.width; y2 = r.y; }

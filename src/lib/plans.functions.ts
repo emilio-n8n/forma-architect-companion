@@ -9,7 +9,7 @@ const Input = z.object({
   budget: z.enum(["Économique", "Moyen de gamme", "Haut de gamme"]),
 });
 
-export type Room = { id: string; name: string; x: number; y: number; w: number; h: number };
+export type Room = { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number };
 export type Opening = {
   id: string;
   type: "door" | "window";
@@ -133,19 +133,26 @@ export const generate2DPlanData = createServerFn({ method: "POST" })
     const v = variants[data.variantIndex];
     if (!v) throw new Error("Variante introuvable");
 
+    const numLevels = row.levels ?? 1;
     const prompt = `Génère un plan 2D architectural EXPORTABLE pour:
 - ${v.name} — ${v.concept}
-- Surface: ${row.surface} m², ${row.bedrooms} chambres, ${row.levels} niveau(x)
+- Surface: ${row.surface} m², ${row.bedrooms} chambres, ${numLevels} niveau(x)
 - Caractéristiques: ${(v.features ?? []).join(", ")}
 
-Représente le plan comme des PIÈCES RECTANGULAIRES adjacentes (coordonnées en mètres, origine en haut-gauche, axe Y vers le bas).
+Ce bâtiment a ${numLevels} niveau(x). Génère les pièces pour CHAQUE niveau avec le champ "floor" (1 = RDC, 2 = 1er étage, etc.).
+
+Répartition des pièces par niveau:
+${numLevels === 1 ? "- Niveau 1 (RDC) : toutes les pièces" : numLevels === 2 ? "- Niveau 1 (RDC) : entrée, séjour, cuisine, WC, cellier\n- Niveau 2 (1er étage) : ${row.bedrooms} chambre(s), salle(s) de bain, dressing, dégagement" : `- Niveau 1 (RDC) : entrée, séjour, cuisine, WC\n- Niveau 2 : ${Math.ceil(row.bedrooms / 2)} chambre(s), salle de bain\n- Niveau 3 : ${Math.floor(row.bedrooms / 2)} chambre(s), salle de bain, buanderie`}
+
+Représente chaque niveau comme des PIÈCES RECTANGULAIRES adjacentes (coordonnées en mètres, origine en haut-gauche, axe Y vers le bas).
+
 Contraintes:
-- Toutes les coordonnées et dimensions en mètres (nombres décimaux).
-- Les pièces NE doivent PAS se chevaucher.
-- Inclure: entrée, séjour, cuisine, ${row.bedrooms} chambre(s), salle(s) de bain, WC, dégagement/couloir si nécessaire.
-- Somme des surfaces ≈ ${row.surface} m² (±10%).
+- Toutes les coordonnées et dimensions en mètres.
+- Les pièces d'un MÊME niveau NE doivent PAS se chevaucher.
+- Chaque pièce a un champ "floor" (1 pour RDC, 2 pour 1er étage, etc.).
+- total_w et total_h = bounding box du plus grand niveau (utilise les mêmes dimensions pour tous les niveaux).
 - Respecter accessibilité PMR (largeurs ≥ 0.9m pour portes).
-- total_w et total_h = bounding box du plan.
+- Somme des surfaces de TOUS les niveaux ≈ ${row.surface} m² (±10%).
 
 Pour chaque ouverture (porte/fenêtre):
 - room_id = id de la pièce
@@ -154,7 +161,7 @@ Pour chaque ouverture (porte/fenêtre):
 - width = largeur ouverture en mètres
 
 Format JSON strict:
-{"unit":"m","total_w":number,"total_h":number,"rooms":[{"id":"r1","name":"Séjour","x":0,"y":0,"w":5.2,"h":4.8}],"openings":[{"id":"o1","type":"door","room_id":"r1","wall":"S","offset":2.0,"width":0.9}]}`;
+{"unit":"m","total_w":number,"total_h":number,"rooms":[{"id":"r1","name":"Séjour","x":0,"y":0,"w":5.2,"h":4.8,"floor":1}],"openings":[{"id":"o1","type":"door","room_id":"r1","wall":"S","offset":2.0,"width":0.9}]}`;
 
     const planData = await callJSON<PlanData>(
       prompt,
@@ -180,7 +187,7 @@ const UpdateInput = z.object({
     total_w: z.number(),
     total_h: z.number(),
     rooms: z.array(z.object({
-      id: z.string(), name: z.string(), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive(),
+      id: z.string(), name: z.string(), x: z.number(), y: z.number(), w: z.number().positive(), h: z.number().positive(), floor: z.number().int().min(1).optional(),
     })),
     openings: z.array(z.object({
       id: z.string(),
@@ -207,9 +214,10 @@ export const enhancePlanWithAI = createServerFn({ method: "POST" })
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à enrichir");
 
     const current = v.plan_2d_data;
+    const numLevels = new Set(current.rooms.map((r) => r.floor ?? 1)).size;
     const prompt = `Tu es un architecte DPLG expert RE2020/PMR/PLU. Améliore ce plan 2D.
 
-Plan actuel:
+Plan actuel (${numLevels} niveau(x)):
 ${JSON.stringify(current)}
 
 Règles à appliquer:
@@ -217,6 +225,7 @@ Règles à appliquer:
 2. **Accessibilité PMR** — portes ≥ 0.9m, espaces de rotation Ø 1.50m dans chaque pièce, seuils 0, circulation ≥ 1.20m.
 3. **PLU** — recul 3m limites, hauteur sous plafond 2.6m, stationnement 1 place/60m².
 4. **Optimisation** — fenêtres positionnées pour éclairage naturel max, ajout zones techniques (cellier, buanderie) si place.
+5. **Multi-niveaux** — chaque pièce conserve son champ "floor". Conserve la répartition des pièces par niveau.
 
 Retourne UNIQUEMENT le JSON du plan amélioré (même structure, champs "enhanced": true).`;
 

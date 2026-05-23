@@ -192,6 +192,18 @@ function PlanDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const exportFloors = (format: "svg" | "dxf") => {
+    const floors = [...new Set(draft.rooms.map((r) => r.floor ?? 1))].sort((a, b) => a - b);
+    for (const floor of floors) {
+      const label = floor === 1 ? "RDC" : `Niveau-${floor}`;
+      if (format === "svg") {
+        downloadBlob(planToSvgString(draft, 50, floor), `${variant.name}_${label}.svg`, "image/svg+xml");
+      } else {
+        downloadBlob(planToDxfString(draft, floor), `${variant.name}_${label}.dxf`, "application/dxf");
+      }
+    }
+  };
+
   const confirmMut = useMutation({
     mutationFn: async () => {
       await update({ data: { planId, variantIndex, planData: draft } });
@@ -235,10 +247,10 @@ function PlanDialog({
             <Plan2DEditor plan={draft} editable onChange={setDraft} />
             <div className="flex flex-wrap gap-2 mt-4 justify-between">
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => downloadBlob(planToSvgString(draft), `${variant.name}.svg`, "image/svg+xml")}>
+                <Button size="sm" variant="outline" onClick={() => exportFloors("svg")}>
                   <Download className="h-3.5 w-3.5 mr-2" /> SVG
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => downloadBlob(planToDxfString(draft), `${variant.name}.dxf`, "application/dxf")}>
+                <Button size="sm" variant="outline" onClick={() => exportFloors("dxf")}>
                   <Download className="h-3.5 w-3.5 mr-2" /> DXF (AutoCAD/Revit)
                 </Button>
               </div>
