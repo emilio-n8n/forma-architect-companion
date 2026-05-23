@@ -76,7 +76,7 @@ function ChatInner({
   const { messages, sendMessage, status } = useChat({
     api: "/api/chat",
     id: convId,
-    initialMessages,
+    messages: initialMessages,
     onFinish: ({ message }) => {
       const text = message.parts
         .map((p) => (p.type === "text" ? p.text : ""))
