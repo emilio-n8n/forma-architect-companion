@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const cerebras = createCerebrasProvider();
         const result = streamText({
-          model: cerebras("cerebras-gpt-oss-120b"),
+          model: cerebras("gpt-oss-120b"),
           system: SYSTEM_PROMPT,
           messages: await convertToModelMessages(messages),
           headers: { Authorization: `Bearer ${key}` },

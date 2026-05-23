@@ -46,7 +46,7 @@ async function callJSON<T>(prompt: string, system: string): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "cerebras-gpt-oss-120b",
+      model: "gpt-oss-120b",
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
