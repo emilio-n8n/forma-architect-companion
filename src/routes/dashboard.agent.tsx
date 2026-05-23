@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import { Send, Loader2, MessageSquare, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -74,9 +74,9 @@ function ChatInner({
   onReset: () => void;
 }) {
   const { messages, sendMessage, status } = useChat({
-    api: "/api/chat",
     id: convId,
     messages: initialMessages,
+    transport: new DefaultChatTransport({ api: "/api/chat" }),
     onFinish: ({ message }) => {
       const text = message.parts
         .map((p) => (p.type === "text" ? p.text : ""))

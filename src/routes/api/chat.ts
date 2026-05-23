@@ -17,10 +17,7 @@ async function searchWeb(
   try {
     const res = await fetch("https://api.exa.ai/v1/search", {
       method: "POST",
-      headers: {
-        "x-api-key": exaKey,
-        "Content-Type": "application/json",
-      },
+      headers: { "x-api-key": exaKey, "Content-Type": "application/json" },
       body: JSON.stringify({ query, numResults: 5, type: "auto" }),
     });
     if (!res.ok) return null;
@@ -44,24 +41,11 @@ async function needsSearch(
   key: string
 ): Promise<string | null> {
   const keywords = [
-    "cherche",
-    "recherche",
-    "trouve",
-    "actualité",
-    "récent",
-    "dernières",
-    "dernière",
-    "web",
-    "internet",
-    "google",
+    "cherche", "recherche", "trouve", "actualité", "récent",
+    "dernières", "dernière", "web", "internet", "google",
   ];
   if (!keywords.some((k) => lastMessage.toLowerCase().includes(k)))
     return null;
-
-  const q = [
-    { role: "system", content: "Détermine si l'utilisateur demande une recherche web. Si oui, réponds UNIQUEMENT par la requête de recherche en français. Sinon réponds UNIQUEMENT par NON." },
-    { role: "user", content: lastMessage },
-  ];
 
   try {
     const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
@@ -69,7 +53,10 @@ async function needsSearch(
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-oss-120b",
-        messages: q,
+        messages: [
+          { role: "system", content: "Détermine si l'utilisateur demande une recherche web. Si oui, réponds UNIQUEMENT par la requête de recherche en français. Sinon réponds UNIQUEMENT par NON." },
+          { role: "user", content: lastMessage },
+        ],
         max_tokens: 50,
         temperature: 0,
       }),
@@ -116,7 +103,7 @@ export const Route = createFileRoute("/api/chat")({
           messages: await convertToModelMessages(messages),
           headers: { Authorization: `Bearer ${key}` },
         });
-        return result.toDataStreamResponse();
+        return result.toUIMessageStreamResponse({ originalMessages: messages });
       },
     },
   },
