@@ -25,6 +25,7 @@ export type PlanData = {
   rooms: Room[];
   openings: Opening[];
   confirmed?: boolean;
+  enhanced?: boolean;
 };
 
 export type PlanVariant = {
@@ -189,8 +190,51 @@ const UpdateInput = z.object({
       width: z.number().positive(),
     })),
     confirmed: z.boolean().optional(),
+    enhanced: z.boolean().optional(),
   }),
 });
+
+export const enhancePlanWithAI = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => VariantRef.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à enrichir");
+
+    const current = v.plan_2d_data;
+    const prompt = `Tu es un architecte DPLG expert RE2020/PMR/PLU. Améliore ce plan 2D.
+
+Plan actuel:
+${JSON.stringify(current)}
+
+Règles à appliquer:
+1. **RE2020** — surfaces minimales (Séjour ≥ 20m², chambres ≥ 9m²), orientation sud pour pièces de vie, isolation renforcée (murs ext. 30cm), ventilation naturelle traversante.
+2. **Accessibilité PMR** — portes ≥ 0.9m, espaces de rotation Ø 1.50m dans chaque pièce, seuils 0, circulation ≥ 1.20m.
+3. **PLU** — recul 3m limites, hauteur sous plafond 2.6m, stationnement 1 place/60m².
+4. **Optimisation** — fenêtres positionnées pour éclairage naturel max, ajout zones techniques (cellier, buanderie) si place.
+
+Retourne UNIQUEMENT le JSON du plan amélioré (même structure, champs "enhanced": true).`;
+
+    const enhanced = await callJSON<PlanData>(
+      prompt,
+      "Tu es un architecte DPLG expert RE2020/PMR/PLU. Réponds UNIQUEMENT en JSON valide, sans markdown."
+    );
+    enhanced.unit = "m";
+    enhanced.confirmed = current.confirmed;
+    enhanced.enhanced = true;
+
+    variants[data.variantIndex] = { ...v, plan_2d_data: enhanced, plan_3d_ready: false };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: enhanced, variantIndex: data.variantIndex };
+  });
 
 export const updatePlan2DData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

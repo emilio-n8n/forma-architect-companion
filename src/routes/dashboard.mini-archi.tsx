@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import {
   generate2DPlanData,
   updatePlan2DData,
   confirm2DPlan,
+  enhancePlanWithAI,
   type PlanVariant,
   type PlanData,
 } from "@/lib/plans.functions";
@@ -170,10 +171,24 @@ function PlanDialog({
   const qc = useQueryClient();
   const update = useServerFn(updatePlan2DData);
   const confirm = useServerFn(confirm2DPlan);
+  const enhance = useServerFn(enhancePlanWithAI);
 
   const saveMut = useMutation({
     mutationFn: () => update({ data: { planId, variantIndex, planData: draft } }),
     onSuccess: () => { toast.success("Plan enregistré"); qc.invalidateQueries({ queryKey: ["plans"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const enhanceMut = useMutation({
+    mutationFn: async () => {
+      await update({ data: { planId, variantIndex, planData: draft } });
+      return enhance({ data: { planId, variantIndex } });
+    },
+    onSuccess: (result) => {
+      toast.success("Plan enrichi — normes RE2020/PMR appliquées");
+      setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -201,11 +216,22 @@ function PlanDialog({
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "2d" | "3d")}>
           <TabsList>
-            <TabsTrigger value="2d"><Ruler className="h-3.5 w-3.5 mr-2" /> Plan 2D{draft.confirmed && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}</TabsTrigger>
-            <TabsTrigger value="3d" disabled={!draft.confirmed}><Box className="h-3.5 w-3.5 mr-2" /> Vue 3D</TabsTrigger>
+            <TabsTrigger value="2d">
+              <Ruler className="h-3.5 w-3.5 mr-2" /> Plan 2D
+              {draft.confirmed && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}
+            </TabsTrigger>
+            <TabsTrigger value="3d" disabled={!draft.confirmed}>
+              <Box className="h-3.5 w-3.5 mr-2" /> Vue 3D
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="2d" className="mt-4">
+            {draft.enhanced && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                Plan conforme RE2020 &bull; Accessibilité PMR &bull; Optimisé
+              </div>
+            )}
             <Plan2DEditor plan={draft} editable onChange={setDraft} />
             <div className="flex flex-wrap gap-2 mt-4 justify-between">
               <div className="flex gap-2">
@@ -221,11 +247,35 @@ function PlanDialog({
                   {saveMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : null}
                   Enregistrer
                 </Button>
-                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>
-                  {confirmMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-2" />}
-                  Valider & générer la 3D
-                </Button>
+                {!draft.confirmed && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant={draft.enhanced ? "outline" : "default"}
+                      className={!draft.enhanced ? "bg-amber-600 text-white hover:bg-amber-500" : "border-amber-600/40 text-amber-400"}
+                      onClick={() => enhanceMut.mutate()}
+                      disabled={enhanceMut.isPending}
+                    >
+                      {enhanceMut.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                      ) : draft.enhanced ? (
+                        <ShieldCheck className="h-3.5 w-3.5 mr-2" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5 mr-2" />
+                      )}
+                      {enhanceMut.isPending
+                        ? "Enrichissement…"
+                        : draft.enhanced
+                          ? "Ré-appliquer normes"
+                          : "Appliquer normes RE2020/PMR"}
+                    </Button>
+                    <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={() => confirmMut.mutate()} disabled={confirmMut.isPending}>
+                      {confirmMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-2" />}
+                      Valider & générer la 3D
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -233,6 +283,12 @@ function PlanDialog({
           <TabsContent value="3d" className="mt-4">
             {draft.confirmed ? (
               <>
+                {draft.enhanced && (
+                  <div className="mb-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                    <ShieldCheck className="h-4 w-4 shrink-0" />
+                    Plan conforme RE2020 &bull; Accessibilité PMR &bull; Optimisé
+                  </div>
+                )}
                 <Plan3DViewer plan={draft} />
                 <p className="text-xs text-muted-foreground mt-2">Vue 3D générée à partir du plan 2D validé (murs h. 2.7m, RE2020). Clic + glisser pour orbiter.</p>
                 <div className="mt-3 flex justify-end">
