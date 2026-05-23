@@ -29,7 +29,12 @@ export function Plan3DViewer({ plan }: { plan: PlanData }) {
               <group key={floor}>
                 <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[plan.total_w / 2, yBase, plan.total_h / 2]}>
                   <planeGeometry args={[plan.total_w, plan.total_h]} />
-                  <meshStandardMaterial color="#d8cdb4" />
+                  <meshStandardMaterial
+                    color="#d8cdb4"
+                    transparent={floor > 1}
+                    opacity={floor > 1 ? 0.2 : 1}
+                    depthWrite={floor <= 1}
+                  />
                 </mesh>
                 {floorRooms.map((r) => (
                   <RoomWalls key={r.id} room={r} plan={plan} yBase={yBase} />
