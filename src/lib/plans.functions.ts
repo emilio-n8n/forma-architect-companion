@@ -246,6 +246,57 @@ Retourne UNIQUEMENT le JSON du plan amélioré (même structure, champs "enhance
     return { planData: enhanced, variantIndex: data.variantIndex };
   });
 
+const EditWithAIInput = z.object({
+  planId: z.string().uuid(),
+  variantIndex: z.number().int().min(0).max(5),
+  instruction: z.string().min(1).max(500),
+});
+
+export const editPlanWithAI = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => EditWithAIInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à modifier");
+
+    const current = v.plan_2d_data;
+    const prompt = `Tu es un architecte DPLG. Modifie ce plan 2D selon l'instruction donnée.
+
+Plan actuel:
+${JSON.stringify(current)}
+
+Instruction: "${data.instruction}"
+
+Règles:
+- Modifie uniquement ce qui est demandé.
+- Conserve la structure générale (floor, unit, etc.).
+- Ajuste total_w / total_h si nécessaire.
+- Ne crée pas de chevauchements entre pièces.
+- Conserve les champs "floor" existants sur chaque pièce.
+
+Retourne UNIQUEMENT le JSON du plan modifié (même structure).`;
+
+    const edited = await callJSON<PlanData>(
+      prompt,
+      "Tu es un architecte DPLG. Réponds UNIQUEMENT en JSON valide, sans markdown."
+    );
+    edited.unit = "m";
+    edited.confirmed = current.confirmed;
+    edited.enhanced = current.enhanced;
+
+    variants[data.variantIndex] = { ...v, plan_2d_data: edited, plan_3d_ready: false };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: edited, variantIndex: data.variantIndex };
+  });
+
 export const updatePlan2DData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => UpdateInput.parse(d))

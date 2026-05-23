@@ -16,6 +16,7 @@ import {
   updatePlan2DData,
   confirm2DPlan,
   enhancePlanWithAI,
+  editPlanWithAI,
   type PlanVariant,
   type PlanData,
 } from "@/lib/plans.functions";
@@ -172,6 +173,9 @@ function PlanDialog({
   const update = useServerFn(updatePlan2DData);
   const confirm = useServerFn(confirm2DPlan);
   const enhance = useServerFn(enhancePlanWithAI);
+  const editAi = useServerFn(editPlanWithAI);
+
+  const [editInstruction, setEditInstruction] = useState("");
 
   const saveMut = useMutation({
     mutationFn: () => update({ data: { planId, variantIndex, planData: draft } }),
@@ -187,6 +191,20 @@ function PlanDialog({
     onSuccess: (result) => {
       toast.success("Plan enrichi — normes RE2020/PMR appliquées");
       setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editMut = useMutation({
+    mutationFn: async () => {
+      await update({ data: { planId, variantIndex, planData: draft } });
+      return editAi({ data: { planId, variantIndex, instruction: editInstruction } });
+    },
+    onSuccess: (result) => {
+      toast.success("Modification appliquée");
+      setDraft({ ...result.planData });
+      setEditInstruction("");
       qc.invalidateQueries({ queryKey: ["plans"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -245,6 +263,33 @@ function PlanDialog({
               </div>
             )}
             <Plan2DEditor plan={draft} editable onChange={setDraft} />
+
+            {!draft.confirmed && (
+              <div className="mt-4 flex items-center gap-2">
+                <input
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  placeholder="Retouche rapide IA ex: agrandir le séjour de 2m vers l'est"
+                  className="flex-1 h-9 rounded-md bg-background border border-input px-3 text-sm placeholder:text-muted-foreground/50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && editInstruction.trim() && !editMut.isPending) {
+                      editMut.mutate();
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => editMut.mutate()}
+                  disabled={!editInstruction.trim() || editMut.isPending}
+                  className="shrink-0"
+                >
+                  {editMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                  Appliquer
+                </Button>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 mt-4 justify-between">
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => exportFloors("svg")}>
