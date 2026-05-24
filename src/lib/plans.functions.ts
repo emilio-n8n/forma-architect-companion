@@ -18,6 +18,43 @@ export type Opening = {
   offset: number; // meters from room's top-left along that wall
   width: number; // meters
 };
+export type Furniture = {
+  id: string;
+  type: "table" | "chaise" | "lit" | "canape" | "armoire" | "bureau" | "etagere" | "cuisine" | "table_salon" | "commode" | "chevet";
+  piece_id: string;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  h: number;
+  rotation: number;
+  couleur: string;
+};
+
+export type Tree = {
+  id: string;
+  type: "feuillu" | "conifere" | "fruitier" | "palmier";
+  x: number;
+  z: number;
+  hauteur: number;
+  diametre_couronne: number;
+};
+
+export type Roof = {
+  type: "plat" | "pentu" | "croupe" | "appentis" | "papillon";
+  pente?: number;
+  debord: number;
+  couleur: string;
+};
+
+export type Parcel = {
+  lat: number;
+  lng: number;
+  adresse: string;
+  contour: Array<{ x: number; z: number }>;
+  surface_parcelle: number;
+};
+
 export type PlanData = {
   unit: "m";
   total_w: number;
@@ -26,6 +63,11 @@ export type PlanData = {
   openings: Opening[];
   confirmed?: boolean;
   enhanced?: boolean;
+  roof?: Roof;
+  wallColors?: Record<string, string>;
+  furniture?: Furniture[];
+  landscaping?: { arbres: Tree[] };
+  parcel?: Parcel;
 };
 
 export type PlanVariant = {
@@ -199,6 +241,37 @@ const UpdateInput = z.object({
     })),
     confirmed: z.boolean().optional(),
     enhanced: z.boolean().optional(),
+    roof: z.object({
+      type: z.enum(["plat", "pentu", "croupe", "appentis", "papillon"]),
+      pente: z.number().optional(),
+      debord: z.number(),
+      couleur: z.string(),
+    }).optional(),
+    wallColors: z.record(z.string(), z.string()).optional(),
+    furniture: z.array(z.object({
+      id: z.string(),
+      type: z.enum(["table", "chaise", "lit", "canape", "armoire", "bureau", "etagere", "cuisine", "table_salon", "commode", "chevet"]),
+      piece_id: z.string(),
+      x: z.number(), z: z.number(),
+      w: z.number(), d: z.number(), h: z.number(),
+      rotation: z.number(),
+      couleur: z.string(),
+    })).optional(),
+    landscaping: z.object({
+      arbres: z.array(z.object({
+        id: z.string(),
+        type: z.enum(["feuillu", "conifere", "fruitier", "palmier"]),
+        x: z.number(), z: z.number(),
+        hauteur: z.number(),
+        diametre_couronne: z.number(),
+      })),
+    }).optional(),
+    parcel: z.object({
+      lat: z.number(), lng: z.number(),
+      adresse: z.string(),
+      contour: z.array(z.object({ x: z.number(), z: z.number() })),
+      surface_parcelle: z.number(),
+    }).optional(),
   }),
 });
 
@@ -337,4 +410,190 @@ export const confirm2DPlan = createServerFn({ method: "POST" })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { ok: true };
+  });
+
+export const generateFurniture = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => VariantRef.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
+    const plan = v.plan_2d_data;
+
+    const prompt = `Place les meubles standards dans ce plan architectural.
+
+Plan: ${plan.total_w}m x ${plan.total_h}m
+Pièces:
+${plan.rooms.map((r) => `- ${r.name} (${r.w}m x ${r.h}m) au sol (x:${r.x}, y:${r.y})`).join("\n")}
+
+Pour chaque pièce, génère les meubles adaptés à sa fonction (table, chaises, lit, canapé, armoire, cuisine équipée, bureau, étagères, etc.).
+
+Règles:
+- Coordonnées (x,z) relatives au plan global, z = y du plan 2D
+- Rotation en degrés (0/90/180/270)
+- Couleur en hexadécimal (#xxx)
+- Les meubles NE doivent PAS se chevaucher entre eux ni sortir des murs
+- Laisse un espace de circulation d'au moins 0.6m autour de chaque meuble
+- Place les meubles de manière réaliste (lit contre un mur, table au centre, etc.)
+
+Format JSON strict:
+{"furniture":[{"id":"f1","type":"table","piece_id":"r1","x":2.5,"z":1.5,"w":1.8,"d":0.9,"h":0.75,"rotation":0,"couleur":"#8B7355"}]}`;
+
+    const out = await callJSON<{ furniture: Furniture[] }>(
+      prompt,
+      "Tu es un architecte d'intérieur. Génère un agencement réaliste de meubles standards français. Réponds UNIQUEMENT en JSON valide."
+    );
+
+    const updated = { ...plan, furniture: out.furniture ?? [] };
+    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: updated, variantIndex: data.variantIndex };
+  });
+
+export const generateRoof = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => VariantRef.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
+    const plan = v.plan_2d_data;
+
+    const nbLevels = new Set(plan.rooms.map((r) => r.floor ?? 1)).size;
+    const surface = plan.total_w * plan.total_h;
+    const prompt = `Suggère un toit pour ce bâtiment.
+
+Dimensions: ${plan.total_w}m x ${plan.total_h}m
+Surface au sol: ${Math.round(surface)}m²
+Nombre de niveaux: ${nbLevels}
+Style architectural: ${v.name} — ${v.concept}
+Caractéristiques: ${(v.features ?? []).join(", ")}
+
+Choisis le type de toit le plus adapté:
+- "plat" : toit-terrasse, moderne, faible coût
+- "pentu" : toit en pente (2 pans), classique, bon écoulement
+- "croupe" : 4 pans, élégant, régions venteuses
+- "appentis" : 1 seul pan, contemporain, extension
+- "papillon" : 2 pans inversés, design audacieux
+
+Format JSON strict:
+{"type":"pentu","pente":35,"debord":0.5,"couleur":"#4A4A4A"}`;
+
+    const roof = await callJSON<Roof>(
+      prompt,
+      "Tu es un architecte expert en toitures. Choisis le type et les dimensions adaptés. Réponds UNIQUEMENT en JSON valide."
+    );
+
+    const updated = { ...plan, roof };
+    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: updated, variantIndex: data.variantIndex };
+  });
+
+export const generateLandscaping = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => VariantRef.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
+    const plan = v.plan_2d_data;
+
+    const prompt = `Place des arbres autour de ce bâtiment pour un projet paysager.
+
+Plan: ${plan.total_w}m x ${plan.total_h}m
+Pièces avec leurs orientations:
+${plan.rooms.map((r) => {
+  const walls = ["N", "S", "E", "W"].filter((w) =>
+    plan.openings.some((o) => o.room_id === r.id && o.wall === w)
+  );
+  return `- ${r.name}: fenêtres côté ${walls.join("/") || "aucune"}`;
+}).join("\n")}
+
+Place 4 à 8 arbres autour du bâtiment (NE PAS mettre à l'intérieur).
+Règles d'orientation:
+- Côté Sud : feuillus (ombre en été, soleil en hiver)
+- Côté Nord : conifères (coupe-vent)
+- Côté Est/Ouest : arbres fruitiers ou décoratifs
+- Espacement minimum 2m des murs
+- Coordonnées (x,z) en mètres, z = y du plan 2D
+
+Format JSON strict:
+{"arbres":[{"id":"t1","type":"feuillu","x":-2,"z":5,"hauteur":8,"diametre_couronne":5}]}`;
+
+    const out = await callJSON<{ arbres: Tree[] }>(
+      prompt,
+      "Tu es un paysagiste. Place les arbres de manière réaliste autour du bâtiment. Réponds UNIQUEMENT en JSON valide."
+    );
+
+    const updated = { ...plan, landscaping: { arbres: out.arbres ?? [] } };
+    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: updated, variantIndex: data.variantIndex };
+  });
+
+export const suggestColorPalette = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => VariantRef.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
+    if (error || !row) throw new Error("Plan introuvable");
+    const variants = (row.variants as unknown as PlanVariant[]) ?? [];
+    const v = variants[data.variantIndex];
+    if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
+    const plan = v.plan_2d_data;
+
+    const prompt = `Suggère une palette de couleurs pour les murs de chaque pièce.
+
+Style: ${v.name} — ${v.concept}
+Pièces:
+${plan.rooms.map((r) => `- ${r.name} (${r.w}x${r.h}m)`).join("\n")}
+
+Règles:
+- Palette harmonieuse et cohérente
+- Couleurs hexadécimales adaptées à la fonction de chaque pièce
+- Séjour: tons chauds et accueillants
+- Chambres: tons apaisants
+- Cuisine/SDB: tons clairs et lumineux
+- Murs extérieurs: un seul ton pour tout le bâtiment (clé "exterieur")
+
+Format JSON strict:
+{"colors":{"sejour":"#F5E6D3","chambre":"#E8F0E8","exterieur":"#E8DCC8","..."}}`;
+
+    const out = await callJSON<{ colors: Record<string, string> }>(
+      prompt,
+      "Tu es un architecte d'intérieur spécialisé en palettes de couleurs. Réponds UNIQUEMENT en JSON valide."
+    );
+
+    const updated = { ...plan, wallColors: out.colors };
+    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    const { error: updErr } = await supabase
+      .from("plans")
+      .update({ variants: variants as unknown as never })
+      .eq("id", row.id);
+    if (updErr) throw new Error(updErr.message);
+    return { planData: updated, variantIndex: data.variantIndex };
   });

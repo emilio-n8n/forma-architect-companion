@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,10 @@ import {
   confirm2DPlan,
   enhancePlanWithAI,
   editPlanWithAI,
+  generateFurniture,
+  generateRoof,
+  generateLandscaping,
+  suggestColorPalette,
   type PlanVariant,
   type PlanData,
 } from "@/lib/plans.functions";
@@ -174,8 +178,15 @@ function PlanDialog({
   const confirm = useServerFn(confirm2DPlan);
   const enhance = useServerFn(enhancePlanWithAI);
   const editAi = useServerFn(editPlanWithAI);
+  const furnGen = useServerFn(generateFurniture);
+  const roofGen = useServerFn(generateRoof);
+  const treeGen = useServerFn(generateLandscaping);
+  const colorGen = useServerFn(suggestColorPalette);
 
   const [editInstruction, setEditInstruction] = useState("");
+  const [parcelQuery, setParcelQuery] = useState("");
+  const [parcelResults, setParcelResults] = useState<Array<{ label: string; lat: number; lng: number }>>([]);
+  const [parcelSearching, setParcelSearching] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: () => update({ data: { planId, variantIndex, planData: draft } }),
@@ -210,6 +221,46 @@ function PlanDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const furnitureMut = useMutation({
+    mutationFn: () => furnGen({ data: { planId, variantIndex } }),
+    onSuccess: (result) => {
+      toast.success("Agencement généré");
+      setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const roofMut = useMutation({
+    mutationFn: () => roofGen({ data: { planId, variantIndex } }),
+    onSuccess: (result) => {
+      toast.success("Toit généré");
+      setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const treeMut = useMutation({
+    mutationFn: () => treeGen({ data: { planId, variantIndex } }),
+    onSuccess: (result) => {
+      toast.success("Végétation générée");
+      setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const colorMut = useMutation({
+    mutationFn: () => colorGen({ data: { planId, variantIndex } }),
+    onSuccess: (result) => {
+      toast.success("Palette de couleurs suggérée");
+      setDraft({ ...result.planData });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const exportFloors = (format: "svg" | "dxf") => {
     const floors = [...new Set(draft.rooms.map((r) => r.floor ?? 1))].sort((a, b) => a - b);
     for (const floor of floors) {
@@ -236,6 +287,46 @@ function PlanDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const searchParcel = async (q: string) => {
+    if (q.length < 3) return;
+    setParcelSearching(true);
+    try {
+      const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=5`);
+      const data = await res.json();
+      setParcelResults((data.features ?? []).map((f: { properties: { label: string }; geometry: { coordinates: [number, number] } }) => ({
+        label: f.properties.label,
+        lng: f.geometry.coordinates[0],
+        lat: f.geometry.coordinates[1],
+      })));
+    } catch { setParcelResults([]); }
+    setParcelSearching(false);
+  };
+
+  const selectParcel = (item: { label: string; lat: number; lng: number }) => {
+    const margin = 5;
+    const hw = draft.total_w / 2;
+    const hd = draft.total_h / 2;
+    const contour = [
+      { x: -hw - margin, z: -hd - margin },
+      { x: draft.total_w + hw + margin, z: -hd - margin },
+      { x: draft.total_w + hw + margin, z: draft.total_h + hd + margin },
+      { x: -hw - margin, z: draft.total_h + hd + margin },
+    ];
+    setDraft({
+      ...draft,
+      parcel: {
+        lat: item.lat,
+        lng: item.lng,
+        adresse: item.label,
+        contour,
+        surface_parcelle: Math.round((draft.total_w + margin * 2) * (draft.total_h + margin * 2)),
+      },
+    });
+    setParcelQuery(item.label);
+    setParcelResults([]);
+    toast.success("Parcelle positionnée");
+  };
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-6xl bg-card border-border/40">
@@ -251,7 +342,7 @@ function PlanDialog({
               {draft.confirmed && <Check className="h-3.5 w-3.5 ml-2 text-primary" />}
             </TabsTrigger>
             <TabsTrigger value="3d" disabled={!draft.confirmed}>
-              <Box className="h-3.5 w-3.5 mr-2" /> Vue 3D
+              <Box className="h-3.5 w-3.5 mr-2" /> Vue 3D enrichie
             </TabsTrigger>
           </TabsList>
 
@@ -346,9 +437,123 @@ function PlanDialog({
                     Plan conforme RE2020 &bull; Accessibilité PMR &bull; Optimisé
                   </div>
                 )}
-                <Plan3DViewer plan={draft} />
-                <p className="text-xs text-muted-foreground mt-2">Vue 3D générée à partir du plan 2D validé (murs h. 2.7m, RE2020). Clic + glisser pour orbiter.</p>
-                <div className="mt-3 flex justify-end">
+
+                {/* 3D Toolbar */}
+                <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-border/20">
+                  <Button size="sm" variant="outline" onClick={() => furnitureMut.mutate()} disabled={furnitureMut.isPending}>
+                    {furnitureMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Armchair className="h-3.5 w-3.5 mr-1" />}
+                    Meubles
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => roofMut.mutate()} disabled={roofMut.isPending}>
+                    {roofMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Building2 className="h-3.5 w-3.5 mr-1" />}
+                    Toit
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => colorMut.mutate()} disabled={colorMut.isPending}>
+                    {colorMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Palette className="h-3.5 w-3.5 mr-1" />}
+                    Couleurs
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => treeMut.mutate()} disabled={treeMut.isPending}>
+                    {treeMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <TreePine className="h-3.5 w-3.5 mr-1" />}
+                    Végétation
+                  </Button>
+
+                  {/* Parcel search */}
+                  <div className="relative flex-1 min-w-[200px] max-w-xs">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <input
+                        value={parcelQuery}
+                        onChange={(e) => {
+                          setParcelQuery(e.target.value);
+                          if (e.target.value.length >= 3) {
+                            setTimeout(() => searchParcel(e.target.value), 300);
+                          }
+                        }}
+                        placeholder="Adresse de la parcelle…"
+                        className="w-full h-8 rounded-md bg-background border border-input px-2 text-xs placeholder:text-muted-foreground/50"
+                      />
+                    </div>
+                    {parcelResults.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 z-50 mt-1 border border-border/40 bg-background rounded-md shadow-lg max-h-32 overflow-y-auto">
+                        {parcelResults.map((r, i) => (
+                          <button
+                            key={i}
+                            onClick={() => selectParcel(r)}
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary/10 transition-colors"
+                          >
+                            {r.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Plan3DViewer
+                  plan={draft}
+                  wallColors={draft.wallColors}
+                  showFurniture={!!draft.furniture}
+                  showRoof={!!draft.roof}
+                  showTrees={!!draft.landscaping}
+                  showParcel={!!draft.parcel}
+                />
+
+                {/* Roof & color controls panel */}
+                {(draft.roof || draft.wallColors) && (
+                  <div className="mt-3 p-3 border border-border/20 rounded-lg bg-background/50">
+                    <div className="flex flex-wrap gap-4">
+                      {draft.roof && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <Building2 className="h-3.5 w-3.5 text-primary" />
+                          <span>Toit : <strong>{roofLabels[draft.roof.type]}</strong></span>
+                          <span className="text-muted-foreground">pente {draft.roof.pente ?? 30}°</span>
+                          <input
+                            type="color"
+                            value={draft.roof.couleur}
+                            onChange={(e) => setDraft({ ...draft, roof: { ...draft.roof!, couleur: e.target.value } })}
+                            className="w-6 h-6 rounded cursor-pointer border-0"
+                          />
+                        </div>
+                      )}
+                      {draft.wallColors && Object.entries(draft.wallColors).map(([name, color]) => (
+                        name !== "exterieur" && (
+                          <div key={name} className="flex items-center gap-1.5 text-xs">
+                            <span className="capitalize">{name}</span>
+                            <input
+                              type="color"
+                              value={color}
+                              onChange={(e) => setDraft({
+                                ...draft,
+                                wallColors: { ...draft.wallColors!, [name]: e.target.value },
+                              })}
+                              className="w-5 h-5 rounded cursor-pointer border-0"
+                            />
+                          </div>
+                        )
+                      ))}
+                      {draft.wallColors?.exterieur && (
+                        <div className="flex items-center gap-1.5 text-xs ml-auto">
+                          <span>Extérieur</span>
+                          <input
+                            type="color"
+                            value={draft.wallColors.exterieur}
+                            onChange={(e) => setDraft({
+                              ...draft,
+                              wallColors: { ...draft.wallColors, exterieur: e.target.value },
+                            })}
+                            className="w-5 h-5 rounded cursor-pointer border-0"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground mt-2">Clic + glisser pour orbiter. Molette pour zoomer.</p>
+                <div className="mt-3 flex justify-between">
+                  <Button size="sm" variant="outline" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+                    Enregistrer les modifications 3D
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => setTab("2d")}>
                     <Pencil className="h-3.5 w-3.5 mr-2" /> Modifier le 2D
                   </Button>
@@ -367,3 +572,11 @@ function PlanDialog({
     </Dialog>
   );
 }
+
+const roofLabels: Record<string, string> = {
+  plat: "Plat",
+  pentu: "Pentu (2 pans)",
+  croupe: "Croupe (4 pans)",
+  appentis: "Appentis (1 pan)",
+  papillon: "Papillon",
+};
