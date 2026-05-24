@@ -51,22 +51,47 @@ export function FirstPersonView({
       onLockChange?.(document.pointerLockElement === gl.domElement);
     };
 
-    const handleClick = () => {
-      gl.domElement.requestPointerLock();
+    const handlePointerDown = () => {
+      const el = gl.domElement;
+      if (document.pointerLockElement !== el) {
+        el.requestPointerLock();
+      } else {
+        el.focus();
+      }
     };
 
-    window.addEventListener("keydown", handleKey);
-    window.addEventListener("keyup", handleKey);
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("pointerlockchange", handleLockChange);
-    gl.domElement.addEventListener("click", handleClick);
+    gl.domElement.addEventListener("mousedown", handlePointerDown);
+    gl.domElement.parentElement?.addEventListener("mousedown", handlePointerDown);
 
     return () => {
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("keyup", handleKey);
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("keyup", handleKey);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("pointerlockchange", handleLockChange);
+      gl.domElement.removeEventListener("mousedown", handlePointerDown);
+      gl.domElement.parentElement?.removeEventListener("mousedown", handlePointerDown);
+    };
+
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("keyup", handleKey);
+    document.addEventListener("keydown", handleKey);
+    document.addEventListener("keyup", handleKey);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("pointerlockchange", handleLockChange);
+    gl.domElement.addEventListener("click", handleClick);
+    gl.domElement.parentElement?.addEventListener("click", handleClick);
+
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("keyup", handleKey);
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("keyup", handleKey);
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("pointerlockchange", handleLockChange);
       gl.domElement.removeEventListener("click", handleClick);
+      gl.domElement.parentElement?.removeEventListener("click", handleClick);
     };
   }, [gl, camera, onLockChange]);
 

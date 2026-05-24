@@ -47,7 +47,7 @@ export function Plan3DViewer({
   }), [cx, cz, plan.total_w, plan.total_h]);
 
   return (
-    <div className="w-full h-[500px] rounded-lg overflow-hidden border border-border/40 bg-[#1a1a1a] relative">
+    <div className="w-full h-[500px] rounded-lg overflow-hidden border border-border/40 bg-[#1a1a1a] relative" tabIndex={-1}>
       <Canvas
         camera={{ position: [plan.total_w * 0.8, plan.total_w * 0.7 + totalHeight, plan.total_h * 1.1], fov: 60 }}
         shadows
