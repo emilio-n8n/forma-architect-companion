@@ -1,4 +1,3 @@
-import { PointerLockControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useEffect, useRef } from "react";
@@ -11,8 +10,8 @@ export function FirstPersonView({
   onLockChange?: (locked: boolean) => void;
 }) {
   const { camera, gl } = useThree();
-  const controlsRef = useRef<any>(null);
   const keys = useRef({ w: false, a: false, s: false, d: false });
+  const euler = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
 
   useEffect(() => {
     camera.position.set(
@@ -25,6 +24,7 @@ export function FirstPersonView({
       1.6,
       (bounds.minZ + bounds.maxZ) / 2 - 1
     );
+    euler.current.setFromQuaternion(camera.quaternion);
   }, []);
 
   useEffect(() => {
@@ -37,20 +37,38 @@ export function FirstPersonView({
         case "KeyD": keys.current.d = down; break;
       }
     };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (document.pointerLockElement !== gl.domElement) return;
+      const sensitivity = 0.002;
+      euler.current.y -= e.movementX * sensitivity;
+      euler.current.x -= e.movementY * sensitivity;
+      euler.current.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.current.x));
+      camera.quaternion.setFromEuler(euler.current);
+    };
+
     const handleLockChange = () => {
       onLockChange?.(document.pointerLockElement === gl.domElement);
     };
 
+    const handleClick = () => {
+      gl.domElement.requestPointerLock();
+    };
+
     window.addEventListener("keydown", handleKey);
     window.addEventListener("keyup", handleKey);
+    document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("pointerlockchange", handleLockChange);
+    gl.domElement.addEventListener("click", handleClick);
 
     return () => {
       window.removeEventListener("keydown", handleKey);
       window.removeEventListener("keyup", handleKey);
+      document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("pointerlockchange", handleLockChange);
+      gl.domElement.removeEventListener("click", handleClick);
     };
-  }, [gl, onLockChange]);
+  }, [gl, camera, onLockChange]);
 
   useFrame((_, delta) => {
     if (document.pointerLockElement !== gl.domElement) return;
@@ -77,5 +95,5 @@ export function FirstPersonView({
     }
   });
 
-  return <PointerLockControls ref={controlsRef} />;
+  return null;
 }

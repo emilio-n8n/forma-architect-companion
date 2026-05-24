@@ -81,11 +81,12 @@ export function Plan3DViewer({
                   <planeGeometry args={[plan.total_w, plan.total_h]} />
                   <meshStandardMaterial
                     color="#d8cdb4"
-                    transparent={floor > 1}
-                    opacity={floor > 1 ? 0.2 : 1}
-                    depthWrite={floor <= 1}
+                    transparent={!walkMode && floor > 1}
+                    opacity={!walkMode && floor > 1 ? 0.2 : 1}
+                    depthWrite={walkMode || floor <= 1}
                   />
                 </mesh>
+
 
                 {/* Walls */}
                 {floorRooms.map((r) => (
