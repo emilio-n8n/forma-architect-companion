@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2 } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -26,8 +26,10 @@ import {
 } from "@/lib/plans.functions";
 import { planToSvgString, planToDxfString, downloadBlob } from "@/lib/plan-export";
 import { planToObjString, downloadObj } from "@/lib/plan-export-3d";
+import { planToGltfBlob } from "@/lib/plan-export-gltf";
 import { Plan2DEditor } from "@/components/Plan2DEditor";
 import { Plan3DViewer } from "@/components/Plan3DViewer";
+import { CesiumViewer } from "@/components/CesiumViewer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/mini-archi")({
@@ -173,7 +175,7 @@ function PlanDialog({
 }) {
   const initial = variant.plan_2d_data!;
   const [draft, setDraft] = useState<PlanData>(initial);
-  const [tab, setTab] = useState<"2d" | "3d">(initial.confirmed ? "3d" : "2d");
+  const [tab, setTab] = useState<"2d" | "3d" | "site_reel">(initial.confirmed ? "3d" : "2d");
   const qc = useQueryClient();
   const update = useServerFn(updatePlan2DData);
   const confirm = useServerFn(confirm2DPlan);
@@ -188,6 +190,20 @@ function PlanDialog({
   const [parcelQuery, setParcelQuery] = useState("");
   const [parcelResults, setParcelResults] = useState<Array<{ label: string; lat: number; lng: number }>>([]);
   const [parcelSearching, setParcelSearching] = useState(false);
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [exportingModel, setExportingModel] = useState(false);
+
+  useEffect(() => {
+    if (tab !== "site_reel" || !draft.parcel || exportingModel) return;
+    setExportingModel(true);
+    planToGltfBlob(draft)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        setModelUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+      })
+      .catch(() => toast.error("Erreur d'export du modèle 3D"))
+      .finally(() => setExportingModel(false));
+  }, [tab]);
 
   const saveMut = useMutation({
     mutationFn: () => update({ data: { planId, variantIndex, planData: draft } }),
@@ -336,7 +352,7 @@ function PlanDialog({
           <DialogDescription>{variant.concept}</DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "2d" | "3d")}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "2d" | "3d" | "site_reel")}>
           <TabsList>
             <TabsTrigger value="2d">
               <Ruler className="h-3.5 w-3.5 mr-2" /> Plan 2D
@@ -344,6 +360,9 @@ function PlanDialog({
             </TabsTrigger>
             <TabsTrigger value="3d" disabled={!draft.confirmed}>
               <Box className="h-3.5 w-3.5 mr-2" /> Vue 3D enrichie
+            </TabsTrigger>
+            <TabsTrigger value="site_reel" disabled={!draft.parcel}>
+              <Globe className="h-3.5 w-3.5 mr-2" /> Site réel
             </TabsTrigger>
           </TabsList>
 
@@ -565,6 +584,40 @@ function PlanDialog({
               </>
             ) : (
               <p className="text-sm text-muted-foreground">Validez le plan 2D pour générer la 3D.</p>
+            )}
+          </TabsContent>
+          {/* Site réel tab */}
+          <TabsContent value="site_reel" className="mt-4">
+            {draft.parcel ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  {draft.parcel.adresse}
+                  <span className="text-muted-foreground/50">
+                    ({draft.parcel.lat.toFixed(5)}, {draft.parcel.lng.toFixed(5)})
+                  </span>
+                </div>
+                {exportingModel && (
+                  <div className="flex items-center justify-center h-[500px] rounded-lg border border-border/40 bg-card">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Export du modèle 3D…
+                    </div>
+                  </div>
+                )}
+                {!exportingModel && modelUrl && (
+                  <CesiumViewer plan={draft} modelUrl={modelUrl} />
+                )}
+                {!exportingModel && !modelUrl && (
+                  <div className="flex items-center justify-center h-[500px] rounded-lg border border-border/40 bg-card">
+                    <p className="text-sm text-muted-foreground">Cliquez sur l'onglet pour charger le globe.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Sélectionnez une adresse de parcelle dans l'onglet 3D pour voir la maison dans son environnement réel.
+              </p>
             )}
           </TabsContent>
         </Tabs>
