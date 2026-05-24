@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2 } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -184,6 +184,7 @@ function PlanDialog({
   const colorGen = useServerFn(suggestColorPalette);
 
   const [editInstruction, setEditInstruction] = useState("");
+  const [walkMode, setWalkMode] = useState(false);
   const [parcelQuery, setParcelQuery] = useState("");
   const [parcelResults, setParcelResults] = useState<Array<{ label: string; lat: number; lng: number }>>([]);
   const [parcelSearching, setParcelSearching] = useState(false);
@@ -456,6 +457,14 @@ function PlanDialog({
                     {treeMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <TreePine className="h-3.5 w-3.5 mr-1" />}
                     Végétation
                   </Button>
+                  <Button
+                    size="sm"
+                    variant={walkMode ? "default" : "outline"}
+                    className={walkMode ? "bg-primary text-primary-foreground" : ""}
+                    onClick={() => setWalkMode((v) => !v)}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" /> {walkMode ? "Quitter" : "Visite virtuelle"}
+                  </Button>
 
                   {/* Parcel search */}
                   <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -496,6 +505,7 @@ function PlanDialog({
                   showRoof={!!draft.roof}
                   showTrees={!!draft.landscaping}
                   showParcel={!!draft.parcel}
+                  walkMode={walkMode}
                 />
 
                 {/* Roof & color controls panel */}

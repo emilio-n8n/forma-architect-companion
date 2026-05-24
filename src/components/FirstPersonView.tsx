@@ -1,0 +1,81 @@
+import { PointerLockControls } from "@react-three/drei";
+import { useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
+import { useEffect, useRef } from "react";
+
+export function FirstPersonView({
+  bounds,
+  onLockChange,
+}: {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  onLockChange?: (locked: boolean) => void;
+}) {
+  const { camera, gl } = useThree();
+  const controlsRef = useRef<any>(null);
+  const keys = useRef({ w: false, a: false, s: false, d: false });
+
+  useEffect(() => {
+    camera.position.set(
+      (bounds.minX + bounds.maxX) / 2,
+      1.6,
+      (bounds.minZ + bounds.maxZ) / 2
+    );
+    camera.lookAt(
+      (bounds.minX + bounds.maxX) / 2,
+      1.6,
+      (bounds.minZ + bounds.maxZ) / 2 - 1
+    );
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const down = e.type === "keydown";
+      switch (e.code) {
+        case "KeyW": keys.current.w = down; break;
+        case "KeyA": keys.current.a = down; break;
+        case "KeyS": keys.current.s = down; break;
+        case "KeyD": keys.current.d = down; break;
+      }
+    };
+    const handleLockChange = () => {
+      onLockChange?.(document.pointerLockElement === gl.domElement);
+    };
+
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("keyup", handleKey);
+    document.addEventListener("pointerlockchange", handleLockChange);
+
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("keyup", handleKey);
+      document.removeEventListener("pointerlockchange", handleLockChange);
+    };
+  }, [gl, onLockChange]);
+
+  useFrame((_, delta) => {
+    if (document.pointerLockElement !== gl.domElement) return;
+
+    const speed = 3.5 * delta;
+    const moveVec = new THREE.Vector3();
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    forward.y = 0; forward.normalize();
+    right.y = 0; right.normalize();
+
+    if (keys.current.w) moveVec.add(forward);
+    if (keys.current.s) moveVec.sub(forward);
+    if (keys.current.a) moveVec.sub(right);
+    if (keys.current.d) moveVec.add(right);
+
+    if (moveVec.length() > 0) {
+      moveVec.normalize().multiplyScalar(speed);
+      const newPos = camera.position.clone().add(moveVec);
+      newPos.x = Math.max(bounds.minX + 0.3, Math.min(bounds.maxX - 0.3, newPos.x));
+      newPos.z = Math.max(bounds.minZ + 0.3, Math.min(bounds.maxZ - 0.3, newPos.z));
+      newPos.y = 1.6;
+      camera.position.copy(newPos);
+    }
+  });
+
+  return <PointerLockControls ref={controlsRef} />;
+}

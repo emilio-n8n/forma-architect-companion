@@ -4,8 +4,9 @@ import type { PlanData } from "@/lib/plans.functions";
 import { FurnitureGroup } from "@/components/Furniture3D";
 import { RoofMesh } from "@/components/Roof3D";
 import { TreeGroup } from "@/components/Tree3D";
+import { FirstPersonView } from "@/components/FirstPersonView";
 import * as THREE from "three";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 const WALL_H = 2.7;
 const WALL_T = 0.2;
@@ -18,6 +19,7 @@ export function Plan3DViewer({
   showRoof = true,
   showTrees = true,
   showParcel = true,
+  walkMode = false,
 }: {
   plan: PlanData;
   wallColors?: Record<string, string>;
@@ -25,6 +27,7 @@ export function Plan3DViewer({
   showRoof?: boolean;
   showTrees?: boolean;
   showParcel?: boolean;
+  walkMode?: boolean;
 }) {
   const floors = useMemo(
     () => [...new Set(plan.rooms.map((r) => r.floor ?? 1))].sort((a, b) => a - b),
@@ -34,11 +37,19 @@ export function Plan3DViewer({
   const cx = plan.total_w / 2;
   const cz = plan.total_h / 2;
   const roofTop = floors.length > 0 ? floors.length * FLOOR_H : 2.7;
+  const [locked, setLocked] = useState(false);
+
+  const walkBounds = useMemo(() => ({
+    minX: -cx + 0.5,
+    maxX: -cx + plan.total_w - 0.5,
+    minZ: -cz + 0.5,
+    maxZ: -cz + plan.total_h - 0.5,
+  }), [cx, cz, plan.total_w, plan.total_h]);
 
   return (
-    <div className="w-full h-[500px] rounded-lg overflow-hidden border border-border/40 bg-[#1a1a1a]">
+    <div className="w-full h-[500px] rounded-lg overflow-hidden border border-border/40 bg-[#1a1a1a] relative">
       <Canvas
-        camera={{ position: [plan.total_w * 0.8, plan.total_w * 0.7 + totalHeight, plan.total_h * 1.1], fov: 45 }}
+        camera={{ position: [plan.total_w * 0.8, plan.total_w * 0.7 + totalHeight, plan.total_h * 1.1], fov: 60 }}
         shadows
       >
         <ambientLight intensity={0.5} />
@@ -46,13 +57,15 @@ export function Plan3DViewer({
         <Environment preset="city" />
 
         {/* Grid */}
-        <Grid
-          args={[Math.max(40, plan.total_w * 2), Math.max(40, plan.total_h * 2)]}
-          cellColor="#333"
-          sectionColor="#555"
-          position={[0, -0.01, 0]}
-          infiniteGrid={false}
-        />
+        {!walkMode && (
+          <Grid
+            args={[Math.max(40, plan.total_w * 2), Math.max(40, plan.total_h * 2)]}
+            cellColor="#333"
+            sectionColor="#555"
+            position={[0, -0.01, 0]}
+            infiniteGrid={false}
+          />
+        )}
 
         <group position={[-cx, 0, -cz]}>
           {floors.map((floor) => {
@@ -103,8 +116,33 @@ export function Plan3DViewer({
           )}
         </group>
 
-        <OrbitControls makeDefault target={[0, totalHeight / 2, 0]} />
+        {walkMode ? (
+          <FirstPersonView bounds={walkBounds} onLockChange={setLocked} />
+        ) : (
+          <OrbitControls makeDefault target={[0, totalHeight / 2, 0]} />
+        )}
       </Canvas>
+
+      {/* Overlay UI outside Canvas */}
+      {walkMode && (
+        <div className="absolute inset-0 pointer-events-none z-10">
+          {locked ? (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+              <div className="w-6 h-6 relative">
+                <div className="absolute top-1/2 left-0 w-full h-px bg-white/60" />
+                <div className="absolute top-0 left-1/2 w-px h-full bg-white/60" />
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-black/60 backdrop-blur-sm border border-white/10 px-6 py-3 rounded-lg text-center">
+                <p className="text-white/80 text-sm">Cliquez pour activer la visite</p>
+                <p className="text-white/40 text-[10px] mt-1">WASD pour se déplacer · Échap pour quitter</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
