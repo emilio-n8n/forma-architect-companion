@@ -190,17 +190,14 @@ function PlanDialog({
   const [parcelQuery, setParcelQuery] = useState("");
   const [parcelResults, setParcelResults] = useState<Array<{ label: string; lat: number; lng: number }>>([]);
   const [parcelSearching, setParcelSearching] = useState(false);
-  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [modelBlob, setModelBlob] = useState<Blob | null>(null);
   const [exportingModel, setExportingModel] = useState(false);
 
   useEffect(() => {
     if (tab !== "site_reel" || !draft.parcel || exportingModel) return;
     setExportingModel(true);
     planToGltfBlob(draft)
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        setModelUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
-      })
+      .then((blob) => setModelBlob(blob))
       .catch(() => toast.error("Erreur d'export du modèle 3D"))
       .finally(() => setExportingModel(false));
   }, [tab]);
@@ -605,10 +602,10 @@ function PlanDialog({
                     </div>
                   </div>
                 )}
-                {!exportingModel && modelUrl && (
-                  <CesiumViewer plan={draft} modelUrl={modelUrl} />
+                {!exportingModel && modelBlob && (
+                  <CesiumViewer plan={draft} modelBlob={modelBlob} />
                 )}
-                {!exportingModel && !modelUrl && (
+                {!exportingModel && !modelBlob && (
                   <div className="flex items-center justify-center h-[500px] rounded-lg border border-border/40 bg-card">
                     <p className="text-sm text-muted-foreground">Cliquez sur l'onglet pour charger le globe.</p>
                   </div>

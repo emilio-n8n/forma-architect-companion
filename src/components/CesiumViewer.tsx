@@ -19,22 +19,31 @@ function loadCesiumAssets(): Promise<void> {
   });
 }
 
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function CesiumViewer({
   plan,
-  modelUrl,
+  modelBlob,
 }: {
   plan: PlanData;
-  modelUrl: string | null;
+  modelBlob: Blob | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
-  const modelEntityRef = useRef<any>(null);
+  const initializedRef = useRef(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
-  // Init viewer once
+  // One-time init of Cesium viewer
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !plan.parcel) return;
+    if (!el || !plan.parcel || initializedRef.current) return;
     let viewer: any = null;
     let canceled = false;
 
@@ -42,12 +51,12 @@ export function CesiumViewer({
       await loadCesiumAssets();
       if (canceled) return;
 
-      const Cesium = (window as any).Cesium;
+      const C = (window as any).Cesium;
       const token = (import.meta as any).env?.VITE_CESIUM_ION_TOKEN;
-      if (token) Cesium.Ion.defaultAccessToken = token;
+      if (token) C.Ion.defaultAccessToken = token;
 
       viewer = new Cesium.Viewer(el, {
-        terrain: Cesium.Terrain.fromWorldTerrain(),
+        terrain: C.Terrain.fromWorldTerrain(),
         animation: false,
         timeline: false,
         baseLayerPicker: false,
@@ -59,50 +68,94 @@ export function CesiumViewer({
       viewer.scene.globe.depthTestAgainstTerrain = true;
       viewer.scene.globe.enableLighting = true;
       viewerRef.current = viewer;
+      initializedRef.current = true;
+
       if (!canceled) setState("ready");
     })();
 
     return () => {
       canceled = true;
-      viewer?.destroy();
+      if (viewer) {
+        viewer.entities.removeAll();
+        viewer.destroy();
+      }
       viewerRef.current = null;
+      initializedRef.current = false;
     };
-  }, [plan.parcel?.lat, plan.parcel?.lng]);
+  }, []);
 
-  // Load model when blob URL changes
+  // Load model + set camera when modelBlob is ready
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || !modelUrl || !plan.parcel) return;
+    if (!viewer || !modelBlob || !plan.parcel) return;
 
-    const Cesium = (window as any).Cesium;
+    const C = (window as any).Cesium;
+    if (!C) return;
 
-    if (modelEntityRef.current) {
-      viewer.entities.remove(modelEntityRef.current);
-      modelEntityRef.current = null;
-    }
+    (async () => {
+      try {
+        const dataUri = await blobToDataUri(modelBlob);
+        viewer.entities.removeAll();
 
-    const entity = viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(plan.parcel.lng, plan.parcel.lat, 0),
-      model: {
-        uri: modelUrl,
-        scale: 1,
-        minimumPixelSize: 128,
-        maximumScale: 20000,
-        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-      },
-    });
-    modelEntityRef.current = entity;
+        const pos = C.Cartesian3.fromDegrees(
+          plan.parcel.lng,
+          plan.parcel.lat,
+          0,
+        );
 
-    const buildingSize = Math.max(plan.total_w, plan.total_h);
-    viewer.flyTo(entity, {
-      duration: 2,
-      offset: new Cesium.HeadingPitchRange(
-        Cesium.Math.toRadians(45),
-        Cesium.Math.toRadians(-30),
-        buildingSize * 2 + 20,
-      ),
-    });
-  }, [modelUrl, plan.parcel?.lat, plan.parcel?.lng]);
+        viewer.entities.add({
+          position: pos,
+          model: {
+            uri: dataUri,
+            scale: 1,
+            minimumPixelSize: 256,
+            maximumScale: 20000,
+            heightReference: C.HeightReference.RELATIVE_TO_GROUND,
+          },
+        });
+
+        if (plan.parcel.contour.length > 0) {
+          const rad = (plan.parcel.lat * Math.PI) / 180;
+          const mPerDeg = 111111 * Math.cos(rad);
+          const outline = plan.parcel.contour.map((p) => [
+            plan.parcel.lng + p.x / (111111 * Math.cos(rad)),
+            plan.parcel.lat - p.z / 111111,
+          ]);
+          viewer.entities.add({
+            polygon: {
+              hierarchy: C.Cartesian3.fromDegreesArray(outline.flat()),
+              material: C.Color.YELLOW.withAlpha(0.15),
+              outline: true,
+              outlineColor: C.Color.YELLOW.withAlpha(0.6),
+              outlineWidth: 2,
+              heightReference: C.HeightReference.CLAMP_TO_GROUND,
+            },
+          });
+        }
+
+        const buildingSize = Math.max(plan.total_w, plan.total_h);
+        const altitude = Math.max(buildingSize * 2.5, 30);
+
+        const dest = C.Cartesian3.fromDegrees(
+          plan.parcel.lng,
+          plan.parcel.lat,
+          altitude,
+        );
+
+        viewer.camera.flyTo({
+          destination: dest,
+          orientation: {
+            heading: C.Math.toRadians(45),
+            pitch: C.Math.toRadians(-35),
+            roll: 0,
+          },
+          duration: 1.5,
+        });
+      } catch (e) {
+        console.error("Failed to load model in Cesium", e);
+      }
+    })();
+  }, [modelBlob]);
 
   return (
     <div className="relative w-full h-[500px] rounded-lg overflow-hidden border border-border/40 bg-[#1a1a1a]">
@@ -110,11 +163,6 @@ export function CesiumViewer({
       {state === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
           <p className="text-sm text-muted-foreground animate-pulse">Chargement du globe&hellip;</p>
-        </div>
-      )}
-      {state === "error" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-          <p className="text-sm text-muted-foreground">Impossible de charger le globe 3D.</p>
         </div>
       )}
     </div>
