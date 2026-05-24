@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2, Eye } from "lucide-react";
+import { Wand2, Loader2, Zap, Home, Ruler, Check, Box, Download, Pencil, ShieldCheck, Sparkles, Armchair, Palette, TreePine, MapPin, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   type PlanData,
 } from "@/lib/plans.functions";
 import { planToSvgString, planToDxfString, downloadBlob } from "@/lib/plan-export";
+import { planToObjString, downloadObj } from "@/lib/plan-export-3d";
 import { Plan2DEditor } from "@/components/Plan2DEditor";
 import { Plan3DViewer } from "@/components/Plan3DViewer";
 import { toast } from "sonner";
@@ -184,7 +185,6 @@ function PlanDialog({
   const colorGen = useServerFn(suggestColorPalette);
 
   const [editInstruction, setEditInstruction] = useState("");
-  const [walkMode, setWalkMode] = useState(false);
   const [parcelQuery, setParcelQuery] = useState("");
   const [parcelResults, setParcelResults] = useState<Array<{ label: string; lat: number; lng: number }>>([]);
   const [parcelSearching, setParcelSearching] = useState(false);
@@ -457,13 +457,8 @@ function PlanDialog({
                     {treeMut.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <TreePine className="h-3.5 w-3.5 mr-1" />}
                     Végétation
                   </Button>
-                  <Button
-                    size="sm"
-                    variant={walkMode ? "default" : "outline"}
-                    className={walkMode ? "bg-primary text-primary-foreground" : ""}
-                    onClick={() => setWalkMode((v) => !v)}
-                  >
-                    <Eye className="h-3.5 w-3.5 mr-1" /> {walkMode ? "Quitter" : "Visite virtuelle"}
+                  <Button size="sm" variant="outline" onClick={() => downloadObj(planToObjString(draft), `${variant.name}_3D.obj`)}>
+                    <Download className="h-3.5 w-3.5 mr-1" /> Export 3D (OBJ)
                   </Button>
 
                   {/* Parcel search */}
@@ -505,7 +500,6 @@ function PlanDialog({
                   showRoof={!!draft.roof}
                   showTrees={!!draft.landscaping}
                   showParcel={!!draft.parcel}
-                  walkMode={walkMode}
                 />
 
                 {/* Roof & color controls panel */}
