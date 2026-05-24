@@ -275,17 +275,7 @@ function Landing() {
                 </div>
               </div>
               
-              {/* Floating Architectural Blueprint overlay card */}
-              <div className="absolute bottom-6 right-6 z-30 bg-background/90 backdrop-blur-md p-6 border border-primary/20 text-left transition-all duration-500 hover:border-primary/50 max-w-sm pointer-events-none md:pointer-events-auto">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-[9px] uppercase tracking-widest text-primary font-medium">Bâtiment Réf. 09-026</span>
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                </div>
-                <h3 className="font-display text-xl mb-1 text-foreground">Villa Horizon - Bioclimatique</h3>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Modèle d'expérimentation d'une villa bioclimatique modulaire à ossature bois noble (cèdre) généré par Render AI à partir de plans d'intentions filaires 2D. Conçue avec isolation biosourcée haute performance et implantée face à l'océan.
-                </p>
-              </div>
+
             </div>
           </div>
         </div>
@@ -432,7 +422,7 @@ function Landing() {
                 </div>
                 
                 <div className="border-t border-border/30 pt-3 mt-2 flex items-center justify-between text-[9px] text-muted-foreground">
-                  <span>Modèle: Gemini 3.5 Pro</span>
+                  <span>Modèle: Cerebras GPT-OSS 120B</span>
                   <span className="flex items-center gap-1.5"><Zap className="h-2.5 w-2.5 text-primary" /> En ligne</span>
                 </div>
               </div>
@@ -638,6 +628,90 @@ function Landing() {
         </div>
       </section>
 
+      {/* Le Studio - Aperçu du Dashboard */}
+      <section id="studio" className="py-32 border-t border-border/20 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/3 rounded-full blur-[180px] pointer-events-none" />
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="max-w-2xl mb-16 text-left">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-primary mb-3">L'expérience complète</p>
+            <h2 className="font-display text-4xl md:text-6xl tracking-tight leading-none">
+              Le Studio <span className="text-gradient-gold">FORMA</span>
+            </h2>
+          </div>
+
+          {/* Dashboard mockup */}
+          <div className="border border-border/30 bg-card/30 rounded-lg overflow-hidden shadow-2xl">
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-6 h-14 border-b border-border/20 bg-background/50">
+              <div className="flex items-center gap-3">
+                <div className="h-6 w-6 rounded gold-gradient flex items-center justify-center">
+                  <Compass className="h-3 w-3 text-primary-foreground" />
+                </div>
+                <span className="font-display text-sm tracking-[0.15em] text-primary">FORMA</span>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-4 border-l border-border/20 pl-4">Studio</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-full bg-primary/10" />
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              </div>
+            </div>
+
+            {/* Body: sidebar + content */}
+            <div className="flex h-96">
+              {/* Sidebar */}
+              <div className="w-56 border-r border-border/20 bg-background/30 p-4 space-y-6 hidden md:block">
+                {[
+                  { icon: <Sparkles className="h-4 w-4" />, label: "Render AI", active: false },
+                  { icon: <MessageSquare className="h-4 w-4" />, label: "Agent IA", active: true },
+                  { icon: <Layers className="h-4 w-4" />, label: "Mini Archi", active: false },
+                  { icon: <FolderKanban className="h-4 w-4" />, label: "Projets", active: false },
+                ].map((item) => (
+                  <div key={item.label} className={`flex items-center gap-3 px-3 py-2 rounded text-xs tracking-wider uppercase ${item.active ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:text-foreground'}`}>
+                    {item.icon}
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Main content mockup */}
+              <div className="flex-1 p-6 bg-[#0a0a0a] flex items-start">
+                <div className="max-w-2xl w-full space-y-4">
+                  <div className="bg-primary/5 border border-primary/10 p-4 rounded max-w-xs ml-auto">
+                    <p className="text-[10px] font-mono text-primary/90">Quelles sont les règles PLU pour cette parcelle ?</p>
+                  </div>
+                  <div className="bg-muted/30 border border-border/10 p-4 rounded max-w-md">
+                    <p className="text-[10px] font-mono text-muted-foreground">Selon le PLU de la zone UBa, hauteur max 10m sous sablière, R+2 autorisé avec retrait H/2...</p>
+                  </div>
+                  <div className="bg-primary/5 border border-primary/10 p-4 rounded max-w-xs ml-auto">
+                    <p className="text-[10px] font-mono text-primary/90">Génère-moi une variante avec un étage supplémentaire</p>
+                  </div>
+                  <div className="bg-muted/30 border border-border/10 p-4 rounded max-w-md">
+                    <p className="text-[10px] font-mono text-muted-foreground">Variante générée : R+2 avec toiture terrasse, retrait 5.5m, structure bois RE2020 conforme.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature tags */}
+          <div className="mt-12 flex flex-wrap gap-3 justify-center">
+            {["Rendu photoréaliste", "Agent réglementaire", "Plans 2D/3D", "Kanban projets", "Export DXF/SVG", "Multi-étages", "Multi-utilisateurs"].map((tag) => (
+              <span key={tag} className="px-4 py-2 border border-primary/20 bg-primary/5 text-[10px] uppercase tracking-wider text-primary rounded-full">
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-12 text-center">
+            <Link to="/auth">
+              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/95 rounded-none h-14 px-12 text-xs uppercase tracking-widest shadow-gold transition-all duration-300 group">
+                Accéder au Studio <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Numeric Proof & Performance */}
       <section className="py-32 border-t border-border/20 relative bg-gradient-to-b from-background to-[#080808]">
         <div className="mx-auto max-w-7xl px-6">
@@ -658,10 +732,10 @@ function Landing() {
       </section>
 
       {/* The Manifesto / Philosophy Section */}
-      <section id="manifesto" className="py-44 border-t border-border/20 relative bg-[#060606] flex items-center justify-center">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent blur-[120px] pointer-events-none" />
-        
-        <div className="mx-auto max-w-4xl px-6 text-center space-y-12">
+<section id="manifesto" className="py-28 border-t border-border/20 relative bg-[#060606] flex items-center justify-center">
+  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent blur-[120px] pointer-events-none" />
+  
+  <div className="mx-auto max-w-4xl px-6 text-center space-y-8">
           <div className="h-px w-24 bg-primary/40 mx-auto" />
           <p className="text-[10px] uppercase tracking-[0.4em] text-primary">Le Manifeste FORMA</p>
           
@@ -715,7 +789,7 @@ function Landing() {
             <h4 className="text-[10px] uppercase tracking-[0.20em] text-primary mb-4">Technologie</h4>
             <ul className="space-y-2 text-[11px] text-muted-foreground">
               <li className="flex items-center gap-1.5">Supabase DB <Lock className="h-2.5 w-2.5 text-primary/60" /></li>
-              <li className="flex items-center gap-1.5">Gemini 3.5 Pro <Zap className="h-2.5 w-2.5 text-primary/60" /></li>
+              <li className="flex items-center gap-1.5">Cerebras GPT-OSS 120B <Zap className="h-2.5 w-2.5 text-primary/60" /></li>
               <li>Vite & TanStack Start</li>
               <li>ThreeJS Vector</li>
             </ul>
