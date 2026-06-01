@@ -20,13 +20,14 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+        const ip =
+          request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
         const identifier = ip;
 
-        if (!checkRateLimit('CHAT', identifier)) {
-          return new Response('Too many requests. Please try again later.', {
+        if (!checkRateLimit("CHAT", identifier)) {
+          return new Response("Too many requests. Please try again later.", {
             status: 429,
-            headers: getRateLimitHeaders('CHAT', identifier),
+            headers: getRateLimitHeaders("CHAT", identifier),
           });
         }
 
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const key = process.env.CEREBRAS_API_KEY;
         if (!key) {
-          console.error('[SECURITY] CEREBRAS_API_KEY not configured');
+          console.error("[SECURITY] CEREBRAS_API_KEY not configured");
           return new Response("Server configuration error", { status: 500 });
         }
 
@@ -59,18 +60,18 @@ export const Route = createFileRoute("/api/chat")({
           headers: { Authorization: `Bearer ${key}` },
         });
 
-        // NOTE: gpt-oss-120b is a reasoning model — its answer is returned in
-        // `reasoning_content` instead of `content`, so the AI SDK receives an
-        // empty stream and nothing renders. Use a standard chat model.
+        // Cerebras currently exposes only `zai-glm-4.7` and `gpt-oss-120b` here.
+        // `gpt-oss-120b` returns reasoning-only chunks that the AI SDK does not
+        // render reliably, so use the standard chat-compatible Z.ai model.
         const result = streamText({
-          model: cerebras("llama-3.3-70b"),
+          model: cerebras("zai-glm-4.7"),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
         });
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
-          headers: getRateLimitHeaders('CHAT', identifier),
+          headers: getRateLimitHeaders("CHAT", identifier),
         });
       },
     },
