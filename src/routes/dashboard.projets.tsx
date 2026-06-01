@@ -174,5 +174,6 @@ function ProjetsPage() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    </>
   );
 }
