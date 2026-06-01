@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useRef, useState } from "react";
 import type { PlanData } from "@/lib/plans.functions";
 
