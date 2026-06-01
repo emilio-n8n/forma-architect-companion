@@ -1,8 +1,8 @@
 import "@tanstack/react-start";
 import { createFileRoute } from "@tanstack/react-router";
-import { convertToModelMessages, streamText, type UIMessage } from "ai";
-import { createCerebrasProvider } from "@/lib/ai-gateway";
-import { checkRateLimit, getRateLimitHeaders, RATE_LIMIT_CONFIG } from "@/lib/rate-limiter";
+import { streamText, type UIMessage } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
 
 const SYSTEM_PROMPT = `Tu es FORMA Agent, un assistant IA spécialisé en architecture française.
 Tu maîtrises le PLU, la RT/RE2020, le label BBC, les normes d'accessibilité PMR,
