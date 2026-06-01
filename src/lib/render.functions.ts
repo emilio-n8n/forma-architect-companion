@@ -98,7 +98,7 @@ export const generateRender = createServerFn({ method: "POST" })
     
     const fullPrompt = `Rendu architectural photoréaliste, ambiance ${data.ambiance}, météo ${data.weather}, style ${data.style}. ${data.prompt}. Haute qualité, lumière cinématographique, détails fins, perspective architecturale professionnelle.`;
     const dataUrl = await generateImageBase64(fullPrompt, data.referenceUrl);
-    const imageUrl = await persistImage(supabase as never, userId, dataUrl);
+    const storagePath = await persistImage(supabase as never, userId, dataUrl);
 
     const { data: row, error: insErr } = await supabase
       .from("renders")
@@ -109,13 +109,14 @@ export const generateRender = createServerFn({ method: "POST" })
         weather: data.weather,
         style: data.style,
         reference_url: data.referenceUrl ?? null,
-        image_url: imageUrl,
+        image_url: storagePath,
         status: "done",
       })
       .select()
       .single();
     if (insErr) throw new Error(insErr.message);
-    return { id: row.id, imageUrl };
+    const signedUrl = await signRenderPath(supabase as never, storagePath);
+    return { id: row.id, imageUrl: signedUrl ?? storagePath };
   });
 
 const EditSchema = z.object({
@@ -128,7 +129,6 @@ export const editRender = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => EditSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    // ⭐ SECURITY: Vérifier que le rendu appartient à l'utilisateur
     const { data: src, error } = await supabase
       .from("renders")
       .select("*")
@@ -137,9 +137,13 @@ export const editRender = createServerFn({ method: "POST" })
       .single();
     if (error || !src?.image_url) throw new Error("Rendu introuvable ou accès refusé");
 
+    // Sign the source path so the AI gateway can fetch the (now private) image.
+    const sourceSignedUrl = await signRenderPath(supabase as never, src.image_url, 600);
+    if (!sourceSignedUrl) throw new Error("Impossible d'accéder au rendu source");
+
     const prompt = `Modifie ce rendu architectural photoréaliste selon cette instruction: ${data.instruction}. Conserve la cohérence architecturale, le cadrage et la qualité photoréaliste.`;
-    const dataUrl = await generateImageBase64(prompt, src.image_url);
-    const imageUrl = await persistImage(supabase as never, userId, dataUrl);
+    const dataUrl = await generateImageBase64(prompt, sourceSignedUrl);
+    const storagePath = await persistImage(supabase as never, userId, dataUrl);
 
     const { data: row, error: insErr } = await supabase
       .from("renders")
@@ -150,20 +154,20 @@ export const editRender = createServerFn({ method: "POST" })
         weather: src.weather,
         style: src.style,
         reference_url: src.image_url,
-        image_url: imageUrl,
+        image_url: storagePath,
         status: "done",
       })
       .select()
       .single();
     if (insErr) throw new Error(insErr.message);
-    return { id: row.id, imageUrl };
+    const signedUrl = await signRenderPath(supabase as never, storagePath);
+    return { id: row.id, imageUrl: signedUrl ?? storagePath };
   });
 
 export const listRenders = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    // ⭐ SECURITY: Toujours filtrer par user_id (Broken Access Control fix)
     const { data, error } = await supabase
       .from("renders")
       .select("id, image_url, prompt, ambiance, style, weather, created_at")
@@ -171,5 +175,14 @@ export const listRenders = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(48);
     if (error) throw new Error(error.message);
-    return data ?? [];
+    const rows = data ?? [];
+    // Replace stored path (or legacy public URL) with a fresh signed URL.
+    const signed = await Promise.all(
+      rows.map(async (r) => ({
+        ...r,
+        image_url: r.image_url ? await signRenderPath(supabase as never, r.image_url) : null,
+      })),
+    );
+    return signed;
   });
+
