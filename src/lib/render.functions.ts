@@ -61,9 +61,29 @@ async function persistImage(
     upsert: false,
   });
   if (upErr) throw new Error("Upload storage: " + upErr.message);
-  const { data: pub } = supabase.storage.from("renders").getPublicUrl(path);
-  return pub.publicUrl;
+  // Store the storage path; URLs are signed on-demand server-side (bucket is private).
+  return path;
 }
+
+function extractRenderPath(value: string): string {
+  const marker = "/renders/";
+  const idx = value.indexOf(marker);
+  return idx >= 0 ? value.slice(idx + marker.length) : value;
+}
+
+async function signRenderPath(
+  supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>,
+  value: string,
+  expiresIn = 3600,
+): Promise<string | null> {
+  const path = extractRenderPath(value);
+  const { data, error } = await supabase.storage
+    .from("renders")
+    .createSignedUrl(path, expiresIn);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
 
 export const generateRender = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
