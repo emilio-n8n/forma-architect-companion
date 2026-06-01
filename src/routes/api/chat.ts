@@ -59,11 +59,11 @@ export const Route = createFileRoute("/api/chat")({
           headers: { Authorization: `Bearer ${key}` },
         });
 
-        // NOTE: gpt-oss-120b is a reasoning model — its answer is returned in
-        // `reasoning_content` instead of `content`, so the AI SDK receives an
-        // empty stream and nothing renders. Use a standard chat model.
+        // Cerebras currently exposes only `zai-glm-4.7` and `gpt-oss-120b` here.
+        // `gpt-oss-120b` returns reasoning-only chunks that the AI SDK does not
+        // render reliably, so use the standard chat-compatible Z.ai model.
         const result = streamText({
-          model: cerebras("llama-3.3-70b"),
+          model: cerebras("zai-glm-4.7"),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
         });
