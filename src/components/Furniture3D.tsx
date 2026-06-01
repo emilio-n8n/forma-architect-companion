@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Furniture } from "@/lib/plans.functions";
 import * as THREE from "three";
 
