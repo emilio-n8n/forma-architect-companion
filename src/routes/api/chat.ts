@@ -59,8 +59,11 @@ export const Route = createFileRoute("/api/chat")({
           headers: { Authorization: `Bearer ${key}` },
         });
 
+        // NOTE: gpt-oss-120b is a reasoning model — its answer is returned in
+        // `reasoning_content` instead of `content`, so the AI SDK receives an
+        // empty stream and nothing renders. Use a standard chat model.
         const result = streamText({
-          model: cerebras("gpt-oss-120b"),
+          model: cerebras("llama-3.3-70b"),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
         });
