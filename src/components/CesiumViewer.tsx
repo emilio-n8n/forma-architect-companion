@@ -43,46 +43,74 @@ export function CesiumViewer({
   // One-time init of Cesium viewer
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !plan.parcel || initializedRef.current) return;
+    if (!el || !plan.parcel) return;
+    
     let viewer: any = null;
     let canceled = false;
+    initializedRef.current = true; // Mark as initializing
 
     (async () => {
-      await loadCesiumAssets();
-      if (canceled) return;
+      try {
+        await loadCesiumAssets();
+        if (canceled) return;
 
-      const C = (window as any).Cesium;
-      const token = (import.meta as any).env?.VITE_CESIUM_ION_TOKEN;
-      if (token) C.Ion.defaultAccessToken = token;
+        const C = (window as any).Cesium;
+        const token = (import.meta as any).env?.VITE_CESIUM_ION_TOKEN;
+        if (token) C.Ion.defaultAccessToken = token;
 
-      viewer = new Cesium.Viewer(el, {
-        terrain: C.Terrain.fromWorldTerrain(),
-        animation: false,
-        timeline: false,
-        baseLayerPicker: false,
-        navigationHelpButton: false,
-        infoBox: false,
-        selectionIndicator: false,
-        creditContainer: document.createElement("div"),
-      });
-      viewer.scene.globe.depthTestAgainstTerrain = true;
-      viewer.scene.globe.enableLighting = true;
-      viewerRef.current = viewer;
-      initializedRef.current = true;
+        viewer = new Cesium.Viewer(el, {
+          terrain: C.Terrain.fromWorldTerrain(),
+          animation: false,
+          timeline: false,
+          baseLayerPicker: false,
+          navigationHelpButton: false,
+          infoBox: false,
+          selectionIndicator: false,
+          creditContainer: document.createElement("div"),
+        });
+        viewer.scene.globe.depthTestAgainstTerrain = true;
+        viewer.scene.globe.enableLighting = true;
+        viewerRef.current = viewer;
 
-      if (!canceled) setState("ready");
+        if (!canceled) setState("ready");
+      } catch (error) {
+        console.error("Cesium initialization error:", error);
+        if (!canceled) setState("error");
+      }
     })();
 
     return () => {
+      // ⭐ FIX: Memory Leak - Cleanup properly
       canceled = true;
-      if (viewer) {
-        viewer.entities.removeAll();
-        viewer.destroy();
-      }
-      viewerRef.current = null;
       initializedRef.current = false;
+      
+      if (viewerRef.current) {
+        try {
+          // Destroy the viewer and all its resources
+          const v = viewerRef.current;
+          if (v.entities) v.entities.removeAll();
+          if (v.scene) {
+            // Cleanup scene resources
+            if (v.scene.primitives) v.scene.primitives.removeAll();
+            if (v.scene.imageryLayers) v.scene.imageryLayers.removeAll();
+          }
+          v.destroy();
+        } catch (e) {
+          console.error("Cesium cleanup error:", e);
+        }
+        viewerRef.current = null;
+      }
+      
+      // Also cleanup the local viewer reference
+      if (viewer) {
+        try {
+          viewer.destroy();
+        } catch (e) {
+          console.error("Cesium cleanup error (local):", e);
+        }
+      }
     };
-  }, []);
+  }, [plan.parcel]);
 
   // Load model + set camera when modelBlob is ready
   useEffect(() => {

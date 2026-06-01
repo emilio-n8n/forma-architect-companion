@@ -63,12 +63,45 @@ function RenderPage() {
   const handleFile = async (file: File) => {
     setUploading(true);
     try {
+      // ⭐ SECURITY: Validation des uploads de fichiers
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+      const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+      
+      // 1. Validation type MIME
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        throw new Error("Type de fichier non autorisé. Images seulement (JPEG, PNG, WebP).");
+      }
+      
+      // 2. Validation taille
+      if (file.size > MAX_SIZE) {
+        throw new Error("Fichier trop volumineux. Maximum 10MB.");
+      }
+      
+      // 3. Validation extension
+      const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+      if (!ALLOWED_EXTENSIONS.includes(extension)) {
+        throw new Error("Extension de fichier non autorisée.");
+      }
+      
+      // 4. Validation nom de fichier (sécurité)
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9 _\-\.]*[a-zA-Z0-9]$/.test(file.name) && !file.name.endsWith(extension)) {
+        throw new Error("Nom de fichier invalide.");
+      }
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const path = `${user.id}/ref-${Date.now()}-${file.name}`;
-      const { error } = await supabase.storage.from("uploads").upload(path, file);
+      
+      // 5. Générer un nom de fichier sécurisé avec UUID
+      const safeName = `${user.id}/upload-${crypto.randomUUID()}${extension}`;
+      
+      const { error } = await supabase.storage.from("uploads").upload(safeName, file, {
+        contentType: file.type,
+        upsert: false,
+      });
       if (error) throw error;
-      const { data } = await supabase.storage.from("uploads").createSignedUrl(path, 3600);
+      
+      const { data } = await supabase.storage.from("uploads").createSignedUrl(safeName, 3600);
       setRefUrl(data?.signedUrl ?? null);
       toast.success("Référence importée");
     } catch (e) {

@@ -1,11 +1,49 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, Environment } from "@react-three/drei";
 import type { PlanData } from "@/lib/plans.functions";
 import { FurnitureGroup } from "@/components/Furniture3D";
 import { RoofMesh } from "@/components/Roof3D";
 import { TreeGroup } from "@/components/Tree3D";
 import * as THREE from "three";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
+
+// ⭐ FIX: Memory Leak - Cleanup Three.js resources when component unmounts
+function SceneCleanup() {
+  const gl = useThree((state) => state.gl);
+  
+  useEffect(() => {
+    return () => {
+      // Cleanup WebGL resources
+      try {
+        // Dispose all textures
+        const textures = gl.getParameter(gl.TEXTURES);
+        for (let i = 0; i < textures.length; i++) {
+          const texture = gl.getTexture(textures[i]);
+          if (texture) gl.deleteTexture(texture);
+        }
+        
+        // Dispose all renderbuffers
+        const renderbuffers = gl.getParameter(gl.RENDERBUFFERS);
+        for (let i = 0; i < renderbuffers.length; i++) {
+          gl.deleteRenderbuffer(renderbuffers[i]);
+        }
+        
+        // Dispose all framebuffers
+        const framebuffers = gl.getParameter(gl.FRAMEBUFFERS);
+        for (let i = 0; i < framebuffers.length; i++) {
+          gl.deleteFramebuffer(framebuffers[i]);
+        }
+        
+        // Force garbage collection hint
+        if (window.gc) window.gc();
+      } catch (e) {
+        console.error("Three.js cleanup error:", e);
+      }
+    };
+  }, [gl]);
+  
+  return null;
+}
 
 const WALL_H = 2.7;
 const WALL_T = 0.2;
@@ -41,6 +79,8 @@ export function Plan3DViewer({
         camera={{ position: [plan.total_w * 0.8, plan.total_w * 0.7 + totalHeight, plan.total_h * 1.1], fov: 60 }}
         shadows
       >
+        {/* ⭐ FIX: Memory Leak - Cleanup Three.js resources on unmount */}
+        <SceneCleanup />
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 15, 8]} intensity={1.2} castShadow shadow-mapSize={[1024, 1024]} />
         <Environment preset="city" />

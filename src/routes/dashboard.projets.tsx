@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +40,8 @@ function ProjetsPage() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [tag, setTag] = useState("Résidentiel");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => list() });
 
@@ -53,8 +56,23 @@ function ProjetsPage() {
   });
   const delM = useMutation({
     mutationFn: (id: string) => del({ data: { id } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => {
+      toast.success("Projet supprimé");
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+    },
   });
+
+  const handleDeleteClick = (id: string, title: string) => {
+    setProjectToDelete(id);
+    setDeleteDialogOpen(true);
+  };
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -105,7 +123,11 @@ function ProjetsPage() {
                     <Card key={p.id} className="p-4 bg-card border-border/40 hover:border-primary/60 transition-colors group">
                       <div className="flex items-start justify-between gap-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${TAG_COLORS[p.tag ?? ""] ?? "bg-muted"}`}>{p.tag}</span>
-                        <button onClick={() => delM.mutate(p.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleDeleteClick(p.id, p.title)} 
+                          disabled={delM.isPending}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+                        >
                           <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
                         </button>
                       </div>
@@ -129,5 +151,27 @@ function ProjetsPage() {
         </div>
       )}
     </div>
+    
+    {/* ⭐ FIX: Confirmation avant suppression (bug #14) */}
+    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer le projet ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Cette action est irréversible. Le projet et toutes ses données seront supprimés définitivement.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={delM.isPending}>Annuler</AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={() => projectToDelete && delM.mutate(projectToDelete)}
+            disabled={delM.isPending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {delM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Supprimer"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -71,6 +71,11 @@ function AgentPage() {
       onSave={(role, content) => saveFn({ data: { conversationId: convId, role, content } }).catch(() => {})}
       onReset={async () => {
         const { id } = await resetFn();
+        // ⭐ FIX: Race Condition - Reset both state variables atomically
+        // Set both to null first to force ChatInner to re-initialize
+        setInitialMessages(null);
+        setConvId(null);
+        // Then set the new conversation
         setInitialMessages([]);
         setConvId(id);
       }}

@@ -70,30 +70,114 @@ ${planToSvgInner(plan, scale, floor)}
 </svg>`;
 }
 
-/** Minimal DXF (R12 ASCII) — LINE entities for walls + TEXT labels.
- *  Compatible with AutoCAD, BricsCAD, ArchiCAD, Revit (import), LibreCAD. */
+/** DXF (R12 ASCII) — LINE entities for walls + TEXT labels.
+ *  Compatible with AutoCAD, BricsCAD, ArchiCAD, Revit (import), LibreCAD.
+ *  ⭐ FIX: Added proper R12 headers, layer definitions, and entity validation
+ */
 export function planToDxfString(plan: PlanData, floor?: number): string {
   const rooms = floor ? plan.rooms.filter((r) => (r.floor ?? 1) === floor) : plan.rooms;
   const openings = floor
     ? plan.openings.filter((o) => rooms.some((r) => r.id === o.room_id))
     : plan.openings;
   const lines: string[] = [];
+  
+  // ⭐ FIX: Proper DXF R12 format with all required headers
+  const header = `0
+SECTION
+2
+HEADER
+9
+$ACADVER
+1
+AC1009
+9
+$INSUNITS
+70
+6
+9
+$ACADMAINTVER
+70
+72
+0
+ENDSEC`;
+  
+  // ⭐ FIX: Define layers (TABLES section is required in R12)
+  const tables = `0
+SECTION
+2
+TABLES
+0
+TABLE
+2
+LAYER
+70
+4
+0
+LAYER
+2
+WALLS
+70
+64
+62
+7
+6
+Continuous
+0
+LAYER
+2
+DOORS
+70
+64
+62
+7
+6
+Continuous
+0
+LAYER
+2
+WINDOWS
+70
+64
+62
+7
+6
+Continuous
+0
+LAYER
+2
+TEXT
+70
+64
+62
+7
+6
+Continuous
+0
+ENDTAB
+0
+ENDSEC`;
+  
   const pushLine = (x1: number, y1: number, x2: number, y2: number, layer = "WALLS") => {
     // DXF Y up — flip Y around total_h.
     const Y1 = plan.total_h - y1;
     const Y2 = plan.total_h - y2;
     lines.push(
-      "0", "LINE", "8", layer,
+      "0", "LINE",
+      "8", layer,
       "10", x1.toFixed(4), "20", Y1.toFixed(4), "30", "0.0",
       "11", x2.toFixed(4), "21", Y2.toFixed(4), "31", "0.0"
     );
   };
+  
   const pushText = (x: number, y: number, txt: string, height = 0.25, layer = "TEXT") => {
     const Y = plan.total_h - y;
+    // ⭐ FIX: Escape special characters in DXF text
+    const safeTxt = txt.replace(/[\\;]/g, "_");
     lines.push(
-      "0", "TEXT", "8", layer,
+      "0", "TEXT",
+      "8", layer,
       "10", x.toFixed(4), "20", Y.toFixed(4), "30", "0.0",
-      "40", height.toFixed(3), "1", txt
+      "40", height.toFixed(3), "1", safeTxt
     );
   };
 
@@ -102,9 +186,10 @@ export function planToDxfString(plan: PlanData, floor?: number): string {
     pushLine(r.x + r.w, r.y, r.x + r.w, r.y + r.h);
     pushLine(r.x + r.w, r.y + r.h, r.x, r.y + r.h);
     pushLine(r.x, r.y + r.h, r.x, r.y);
-    pushText(r.x + 0.1, r.y + 0.4, r.name);
-    pushText(r.x + 0.1, r.y + 0.1, `${(r.w * r.h).toFixed(2)} m2`, 0.18);
+    pushText(r.x + r.w * 0.15, r.y + r.h * 0.6, r.name, 0.30);
+    pushText(r.x + r.w * 0.15, r.y + r.h * 0.4, `${(r.w * r.h).toFixed(2)} m2`, 0.20);
   }
+  
   // Openings on OPENINGS layer (overwrite wall segment visually in CAD)
   for (const o of openings) {
     const r = rooms.find((x) => x.id === o.room_id);
@@ -118,16 +203,8 @@ export function planToDxfString(plan: PlanData, floor?: number): string {
   }
 
   const body = lines.join("\n");
-  return `0
-SECTION
-2
-HEADER
-9
-$INSUNITS
-70
-6
-0
-ENDSEC
+  return `${header}
+${tables}
 0
 SECTION
 2

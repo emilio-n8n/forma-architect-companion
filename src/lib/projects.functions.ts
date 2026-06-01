@@ -7,9 +7,12 @@ const Status = z.enum(["todo", "in_progress", "review", "done"]);
 export const listProjects = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Toujours filtrer par user_id (Broken Access Control fix)
+    const { data, error } = await supabase
       .from("projects")
       .select("*")
+      .eq("user_id", userId)
       .order("position", { ascending: true });
     if (error) throw new Error(error.message);
     return data ?? [];
@@ -41,7 +44,18 @@ export const updateProjectStatus = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), status: Status }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le projet appartient à l'utilisateur
+    const { error: checkError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", data.id)
+      .eq("user_id", userId)
+      .single();
+    if (checkError) {
+      throw new Error("Projet introuvable ou accès refusé");
+    }
+    const { error } = await supabase
       .from("projects")
       .update({ status: data.status })
       .eq("id", data.id);
@@ -53,7 +67,18 @@ export const deleteProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("projects").delete().eq("id", data.id);
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le projet appartient à l'utilisateur avant suppression
+    const { error: checkError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", data.id)
+      .eq("user_id", userId)
+      .single();
+    if (checkError) {
+      throw new Error("Projet introuvable ou accès refusé");
+    }
+    const { error } = await supabase.from("projects").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });

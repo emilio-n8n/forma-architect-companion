@@ -12,4 +12,38 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      // ⭐ SECURITY: Configure security headers (CSP, HSTS, etc.)
+      headers: {
+        // Content Security Policy - Restrict sources to prevent XSS
+        'Content-Security-Policy': 
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: https: blob:; " +
+          "font-src 'self'; " +
+          "connect-src 'self' https://api.cerebras.ai https://ai.gateway.lovable.dev; " +
+          "frame-src 'none'; " +
+          "object-src 'none'; " +
+          "base-uri 'self'; " +
+          "form-action 'self';",
+        
+        // Prevent MIME type sniffing
+        'X-Content-Type-Options': 'nosniff',
+        
+        // Prevent clickjacking
+        'X-Frame-Options': 'DENY',
+        
+        // Enable XSS protection
+        'X-XSS-Protection': '1; mode=block',
+        
+        // Referrer policy
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        
+        // Permissions policy
+        'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+      },
+    },
+  },
 });

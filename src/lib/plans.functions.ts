@@ -1,10 +1,101 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { checkRateLimit, getRateLimitHeaders } from "./rate-limiter";
 
+// ⭐ SECURITY: Schémas Zod complets pour validation des données
+
+const EnergyClass = z.enum(["A", "B", "C", "D", "E", "F", "G"]);
+
+const RoomSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().min(1).max(200),
+  x: z.number(),
+  y: z.number(),
+  w: z.number().positive(),
+  h: z.number().positive(),
+  floor: z.number().int().min(1).max(6).optional(),
+});
+
+const OpeningSchema = z.object({
+  id: z.string().min(1).max(100),
+  type: z.enum(["door", "window"]),
+  room_id: z.string().min(1).max(100),
+  wall: z.enum(["N", "S", "E", "W"]),
+  offset: z.number(),
+  width: z.number().positive(),
+});
+
+const FurnitureSchema = z.object({
+  id: z.string().min(1).max(100),
+  type: z.enum(["table", "chaise", "lit", "canape", "armoire", "bureau", "etagere", "cuisine", "table_salon", "commode", "chevet"]),
+  piece_id: z.string().min(1).max(100),
+  x: z.number(),
+  z: z.number(),
+  w: z.number().positive(),
+  d: z.number().positive(),
+  h: z.number().positive(),
+  rotation: z.number().min(0).max(360),
+  couleur: z.string().min(1).max(50),
+});
+
+const TreeSchema = z.object({
+  id: z.string().min(1).max(100),
+  type: z.enum(["feuillu", "conifere", "fruitier", "palmier"]),
+  x: z.number(),
+  z: z.number(),
+  hauteur: z.number().positive(),
+  diametre_couronne: z.number().positive(),
+});
+
+const RoofSchema = z.object({
+  type: z.enum(["plat", "pentu", "croupe", "appentis", "papillon"]),
+  pente: z.number().optional(),
+  debord: z.number(),
+  couleur: z.string().min(1).max(50),
+});
+
+const ParcelSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  adresse: z.string().min(1).max(500),
+  contour: z.array(z.object({ x: z.number(), z: z.number() })).max(50),
+  surface_parcelle: z.number().positive(),
+});
+
+const PlanDataSchema = z.object({
+  unit: z.literal("m"),
+  total_w: z.number().positive(),
+  total_h: z.number().positive(),
+  rooms: z.array(RoomSchema).max(50),
+  openings: z.array(OpeningSchema).max(100),
+  confirmed: z.boolean().optional(),
+  enhanced: z.boolean().optional(),
+  roof: RoofSchema.optional(),
+  wallColors: z.record(z.string().min(1).max(20), z.string().min(1).max(50)).optional(),
+  furniture: z.array(FurnitureSchema).max(100).optional(),
+  landscaping: z.object({
+    arbres: z.array(TreeSchema).max(20),
+  }).optional(),
+  parcel: ParcelSchema.optional(),
+});
+
+// Schéma pour PlanVariant avec validation complète
+const PlanVariantSchema = z.object({
+  name: z.string().min(1).max(200),
+  concept: z.string().min(1).max(500),
+  features: z.array(z.string().min(1).max(200)).max(10),
+  estimated_cost_eur: z.number().int().positive().max(10000000),
+  energy_class: EnergyClass,
+  pros: z.array(z.string().min(1).max(200)).max(10),
+  plan_2d_data: PlanDataSchema.optional().nullable(),
+  plan_3d_ready: z.boolean().optional(),
+});
+
+// ⭐ FIX: Validation plus stricte des inputs (bug #13)
 const Input = z.object({
   surface: z.number().int().min(20).max(2000),
-  bedrooms: z.number().int().min(0).max(20),
+  bedrooms: z.number().int().min(1).max(20), // ⭐ min(1) au lieu de min(0)
   levels: z.number().int().min(1).max(6),
   budget: z.enum(["Économique", "Moyen de gamme", "Haut de gamme"]),
 });
@@ -112,6 +203,11 @@ export const generatePlans = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    
+    // ⭐ SECURITY: Rate Limiting - 5 requests/minute/user for generation
+    if (!checkRateLimit('GENERATION', userId)) {
+      throw new Error('Limite de requêtes atteinte. Veuillez patienter avant de générer de nouveaux plans.');
+    }
     const prompt = `Génère 6 variantes de plans pour une maison/projet :
 - Surface: ${data.surface} m²
 - Chambres: ${data.bedrooms}
@@ -130,6 +226,9 @@ Exactement 6 variantes.`;
       "Tu es un architecte français senior. Réponds UNIQUEMENT en JSON valide. Prix marché France 2026."
     );
     const variants = (out.variants ?? []).slice(0, 6);
+    
+    // ⭐ SECURITY: Valider tous les variants avec Zod avant insertion (SQL Injection prevention)
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
 
     const { data: row, error } = await supabase
       .from("plans")
@@ -139,7 +238,7 @@ Exactement 6 variantes.`;
         bedrooms: data.bedrooms,
         levels: data.levels,
         budget: data.budget,
-        variants: variants as unknown as never,
+        variants: validatedVariants,
       })
       .select()
       .single();
@@ -150,9 +249,12 @@ Exactement 6 variantes.`;
 export const listPlans = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Toujours filtrer par user_id (Broken Access Control fix)
+    const { data, error } = await supabase
       .from("plans")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20);
     if (error) throw new Error(error.message);
@@ -168,9 +270,10 @@ export const generate2DPlanData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v) throw new Error("Variante introuvable");
@@ -212,10 +315,14 @@ Format JSON strict:
     planData.unit = "m";
     planData.confirmed = false;
 
-    variants[data.variantIndex] = { ...v, plan_2d_data: planData, plan_3d_ready: false };
+    // ⭐ SECURITY: Valider le variant avant mise à jour
+    const validatedPlanData = PlanDataSchema.parse(planData);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedPlanData, plan_3d_ready: false };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData, variantIndex: data.variantIndex };
@@ -279,9 +386,10 @@ export const enhancePlanWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à enrichir");
@@ -310,10 +418,14 @@ Retourne UNIQUEMENT le JSON du plan amélioré (même structure, champs "enhance
     enhanced.confirmed = current.confirmed;
     enhanced.enhanced = true;
 
-    variants[data.variantIndex] = { ...v, plan_2d_data: enhanced, plan_3d_ready: false };
+    // ⭐ SECURITY: Valider le variant avant mise à jour
+    const validatedEnhanced = PlanDataSchema.parse(enhanced);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedEnhanced, plan_3d_ready: false };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: enhanced, variantIndex: data.variantIndex };
@@ -329,9 +441,10 @@ export const editPlanWithAI = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => EditWithAIInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à modifier");
@@ -361,10 +474,14 @@ Retourne UNIQUEMENT le JSON du plan modifié (même structure).`;
     edited.confirmed = current.confirmed;
     edited.enhanced = current.enhanced;
 
-    variants[data.variantIndex] = { ...v, plan_2d_data: edited, plan_3d_ready: false };
+    // ⭐ SECURITY: Valider le variant avant mise à jour
+    const validatedEdited = PlanDataSchema.parse(edited);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedEdited, plan_3d_ready: false };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: edited, variantIndex: data.variantIndex };
@@ -374,16 +491,21 @@ export const updatePlan2DData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => UpdateInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v) throw new Error("Variante introuvable");
-    variants[data.variantIndex] = { ...v, plan_2d_data: data.planData as PlanData };
+    // ⭐ SECURITY: Valider le planData avant mise à jour
+    const validatedPlanData = PlanDataSchema.parse(data.planData);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedPlanData };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { ok: true };
@@ -393,9 +515,10 @@ export const confirm2DPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D à confirmer");
@@ -404,9 +527,12 @@ export const confirm2DPlan = createServerFn({ method: "POST" })
       plan_2d_data: { ...v.plan_2d_data, confirmed: true },
       plan_3d_ready: true,
     };
+    // ⭐ SECURITY: Valider tous les variants avant mise à jour
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { ok: true };
@@ -416,9 +542,10 @@ export const generateFurniture = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
@@ -449,10 +576,14 @@ Format JSON strict:
     );
 
     const updated = { ...plan, furniture: out.furniture ?? [] };
-    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    // ⭐ SECURITY: Valider le plan avant mise à jour
+    const validatedUpdated = PlanDataSchema.parse(updated);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedUpdated };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: updated, variantIndex: data.variantIndex };
@@ -462,9 +593,10 @@ export const generateRoof = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
@@ -495,11 +627,16 @@ Format JSON strict:
       "Tu es un architecte expert en toitures. Choisis le type et les dimensions adaptés. Réponds UNIQUEMENT en JSON valide."
     );
 
-    const updated = { ...plan, roof };
-    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    // ⭐ SECURITY: Valider le roof et le plan avant mise à jour
+    const validatedRoof = RoofSchema.parse(roof);
+    const updated = { ...plan, roof: validatedRoof };
+    const validatedUpdated = PlanDataSchema.parse(updated);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedUpdated };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: updated, variantIndex: data.variantIndex };
@@ -509,9 +646,10 @@ export const generateLandscaping = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
@@ -545,10 +683,14 @@ Format JSON strict:
     );
 
     const updated = { ...plan, landscaping: { arbres: out.arbres ?? [] } };
-    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    // ⭐ SECURITY: Valider le plan avant mise à jour
+    const validatedUpdated = PlanDataSchema.parse(updated);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedUpdated };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: updated, variantIndex: data.variantIndex };
@@ -558,9 +700,10 @@ export const suggestColorPalette = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => VariantRef.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).single();
-    if (error || !row) throw new Error("Plan introuvable");
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que le plan appartient à l'utilisateur
+    const { data: row, error } = await supabase.from("plans").select("*").eq("id", data.planId).eq("user_id", userId).single();
+    if (error || !row) throw new Error("Plan introuvable ou accès refusé");
     const variants = (row.variants as unknown as PlanVariant[]) ?? [];
     const v = variants[data.variantIndex];
     if (!v?.plan_2d_data) throw new Error("Pas de plan 2D");
@@ -589,10 +732,14 @@ Format JSON strict:
     );
 
     const updated = { ...plan, wallColors: out.colors };
-    variants[data.variantIndex] = { ...v, plan_2d_data: updated };
+    // ⭐ SECURITY: Valider le plan avant mise à jour
+    const validatedUpdated = PlanDataSchema.parse(updated);
+    variants[data.variantIndex] = { ...v, plan_2d_data: validatedUpdated };
+    const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
+    
     const { error: updErr } = await supabase
       .from("plans")
-      .update({ variants: variants as unknown as never })
+      .update({ variants: validatedVariants })
       .eq("id", row.id);
     if (updErr) throw new Error(updErr.message);
     return { planData: updated, variantIndex: data.variantIndex };

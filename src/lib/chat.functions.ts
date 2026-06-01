@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { sanitizeHtml } from "./sanitize";
 
 export const ensureConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -26,7 +27,18 @@ export const loadMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ conversationId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que la conversation appartient à l'utilisateur (Broken Access Control fix)
+    const { data: conv, error: convError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", data.conversationId)
+      .eq("user_id", userId)
+      .single();
+    if (convError || !conv) {
+      throw new Error("Conversation introuvable ou accès refusé");
+    }
+    const { data: rows, error } = await supabase
       .from("messages")
       .select("id, role, content, created_at")
       .eq("conversation_id", data.conversationId)
@@ -48,11 +60,25 @@ export const saveMessage = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    // ⭐ SECURITY: Sanitize content to prevent XSS (Stored XSS protection)
+    const sanitizedContent = sanitizeHtml(data.content);
+    
+    // ⭐ SECURITY: Vérifier que la conversation appartient à l'utilisateur
+    const { error: convError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", data.conversationId)
+      .eq("user_id", userId)
+      .single();
+    if (convError) {
+      throw new Error("Conversation introuvable ou accès refusé");
+    }
+    
     const { error } = await supabase.from("messages").insert({
       conversation_id: data.conversationId,
       user_id: userId,
       role: data.role,
-      content: data.content,
+      content: sanitizedContent,
     });
     if (error) throw new Error(error.message);
     await supabase
@@ -106,7 +132,18 @@ export const deleteConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que la conversation appartient à l'utilisateur avant suppression
+    const { error: checkError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", data.id)
+      .eq("user_id", userId)
+      .single();
+    if (checkError) {
+      throw new Error("Conversation introuvable ou accès refusé");
+    }
+    const { error } = await supabase
       .from("conversations")
       .delete()
       .eq("id", data.id);
@@ -120,7 +157,18 @@ export const updateConversationTitle = createServerFn({ method: "POST" })
     z.object({ conversationId: z.string().uuid(), title: z.string().min(1).max(200) }).parse(d),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const { supabase, userId } = context;
+    // ⭐ SECURITY: Vérifier que la conversation appartient à l'utilisateur
+    const { error: checkError } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", data.conversationId)
+      .eq("user_id", userId)
+      .single();
+    if (checkError) {
+      throw new Error("Conversation introuvable ou accès refusé");
+    }
+    const { error } = await supabase
       .from("conversations")
       .update({ title: data.title })
       .eq("id", data.conversationId);
