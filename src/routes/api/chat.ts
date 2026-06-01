@@ -20,13 +20,14 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+        const ip =
+          request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
         const identifier = ip;
 
-        if (!checkRateLimit('CHAT', identifier)) {
-          return new Response('Too many requests. Please try again later.', {
+        if (!checkRateLimit("CHAT", identifier)) {
+          return new Response("Too many requests. Please try again later.", {
             status: 429,
-            headers: getRateLimitHeaders('CHAT', identifier),
+            headers: getRateLimitHeaders("CHAT", identifier),
           });
         }
 
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const key = process.env.CEREBRAS_API_KEY;
         if (!key) {
-          console.error('[SECURITY] CEREBRAS_API_KEY not configured');
+          console.error("[SECURITY] CEREBRAS_API_KEY not configured");
           return new Response("Server configuration error", { status: 500 });
         }
 
@@ -70,7 +71,7 @@ export const Route = createFileRoute("/api/chat")({
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
-          headers: getRateLimitHeaders('CHAT', identifier),
+          headers: getRateLimitHeaders("CHAT", identifier),
         });
       },
     },
