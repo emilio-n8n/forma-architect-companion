@@ -155,7 +155,7 @@ function ChatInner({
 
   const { messages, sendMessage, status } = useChat({
     id: convId,
-    initialMessages,
+    messages: initialMessages,
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     onFinish: ({ message }) => {
       const text = message.parts
