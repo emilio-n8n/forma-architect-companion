@@ -36,14 +36,12 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("messages required", { status: 400 });
         }
 
-        const key = process.env.CEREBRAS_API_KEY;
+        const key = process.env.MISTRAL_API_KEY;
         if (!key) {
-          console.error("[SECURITY] CEREBRAS_API_KEY not configured");
+          console.error("[SECURITY] MISTRAL_API_KEY not configured");
           return new Response("Server configuration error", { status: 500 });
         }
 
-        // Flatten UIMessage parts into plain {role, content:string} — Cerebras (OpenAI-compatible)
-        // requires string content for assistant messages; multi-turn fails otherwise.
         const modelMessages = messages
           .map((m) => ({
             role: m.role as "user" | "assistant" | "system",
@@ -54,17 +52,14 @@ export const Route = createFileRoute("/api/chat")({
           }))
           .filter((m) => m.content.length > 0);
 
-        const cerebras = createOpenAICompatible({
-          name: "cerebras",
-          baseURL: "https://api.cerebras.ai/v1",
+        const mistral = createOpenAICompatible({
+          name: "mistral",
+          baseURL: "https://api.mistral.ai/v1",
           headers: { Authorization: `Bearer ${key}` },
         });
 
-        // Cerebras currently exposes only `zai-glm-4.7` and `gpt-oss-120b` here.
-        // `gpt-oss-120b` returns reasoning-only chunks that the AI SDK does not
-        // render reliably, so use the standard chat-compatible Z.ai model.
         const result = streamText({
-          model: cerebras("zai-glm-4.7"),
+          model: mistral("mistral-large-latest"),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
         });
