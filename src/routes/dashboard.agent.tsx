@@ -12,6 +12,9 @@ import { ensureConversation, loadMessages, saveMessage, resetConversation, gener
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { DocumentPreview } from "@/components/DocumentPreview";
+import { SpreadsheetPreview } from "@/components/SpreadsheetPreview";
+import { EmailPreview } from "@/components/EmailPreview";
 
 export const Route = createFileRoute("/dashboard/agent")({
   component: AgentPage,
@@ -353,6 +356,29 @@ function ChatInner({
                         );
                       }
                       return <strong>{children}</strong>;
+                    },
+                    code: ({ className, children, ...props }) => {
+                      const isInline = !className;
+                      const content = String(children || "").replace(/\n$/, "");
+                      const lang = className?.replace(/^language-/, "") ?? "";
+                      if (!isInline && lang === "doc") {
+                        const title = content.split("\n")[0]?.replace(/^#+\s*/, "").trim();
+                        return <DocumentPreview title={title} content={content} />;
+                      }
+                      if (!isInline && lang === "spreadsheet") {
+                        return <SpreadsheetPreview json={content} />;
+                      }
+                      if (!isInline && lang === "email") {
+                        return <EmailPreview json={content} />;
+                      }
+                      if (isInline) {
+                        return <code className="text-primary bg-muted px-1 py-0.5 rounded text-sm" {...props}>{children}</code>;
+                      }
+                      return (
+                        <pre className="bg-muted border border-border/40 rounded-lg p-4 overflow-x-auto text-sm text-foreground">
+                          <code className={className} {...props}>{children}</code>
+                        </pre>
+                      );
                     },
                   }}
                 >{text}</ReactMarkdown>
