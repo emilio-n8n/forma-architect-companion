@@ -111,7 +111,7 @@ export const Route = createFileRoute("/api/chat")({
           tools: {
             web_search: tool<{ query: string; numResults?: number }, { results: Array<Record<string, unknown>>; total: number; error?: string }>({
               description: "Rechercher des informations récentes sur le web (actualités, réglementations, normes, PLU, DTU, etc.)",
-              parameters: zodSchema(
+              inputSchema: zodSchema(
                 z.object({
                   query: z.string().describe("La requête de recherche précise en français"),
                   numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
