@@ -86,7 +86,7 @@ function AgentPage() {
   };
 
   return (
-    <div className="flex h-full w-full p-4 gap-4" style={{ backgroundColor: "#090909" }}>
+    <div className="flex w-full gap-4 overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)", padding: "1rem", backgroundColor: "#090909" }}>
       <ChatInner
         key={convId}
         convId={convId}
@@ -240,7 +240,7 @@ function ChatInner({
 
   return (
     <section
-      className="flex flex-col w-[350px] min-w-[300px] h-full justify-between"
+      className="flex flex-col w-[350px] min-w-[300px] h-full min-h-0 overflow-hidden"
       data-purpose="chat-sidebar"
       style={{ backgroundColor: "#090909" }}
     >
@@ -341,7 +341,7 @@ function ChatInner({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4">
+      <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4 min-h-0">
         {messages.length === 0 && (
           <div className="text-center text-[#a3a3a3] py-16">
             <FileText className="w-10 h-10 mx-auto opacity-30 mb-4" />
@@ -354,7 +354,7 @@ function ChatInner({
           const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
           if (m.role === "user") {
             return (
-              <div key={m.id} className="self-end bg-[#262626] rounded-full px-4 py-2 text-sm text-[#e5e5e5] max-w-[80%]">
+              <div key={m.id} className="self-end bg-[#262626] rounded-2xl px-4 py-2.5 text-sm text-[#e5e5e5] max-w-[85%] break-words whitespace-pre-wrap">
                 {text}
               </div>
             );
