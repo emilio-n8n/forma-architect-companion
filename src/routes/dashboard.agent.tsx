@@ -562,6 +562,7 @@ function ChatInner({
 function ReactMarkdownContent({
   text,
   onOpenDocument,
+  messageIdx,
 }: {
   text: string;
   onOpenDocument: (doc: { title: string; content: string } | null) => void;
