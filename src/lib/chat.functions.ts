@@ -180,14 +180,14 @@ export const generateSuggestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ messages: z.array(z.object({ role: z.string(), content: z.string() })) }).parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.CEREBRAS_API_KEY;
+    const key = process.env.MISTRAL_API_KEY;
     if (!key) return [];
     const history = data.messages.slice(-4).map((m) => ({ role: m.role, content: m.content }));
-    const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "gpt-oss-120b",
+        model: "mistral-large-latest",
         messages: [
           {
             role: "system",
