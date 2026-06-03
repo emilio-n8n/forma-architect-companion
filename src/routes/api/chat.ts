@@ -1,6 +1,5 @@
-import "@tanstack/react-start";
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, tool, type UIMessage } from "ai";
+import { streamText, tool, zodSchema, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
 import { z } from "zod";
@@ -110,16 +109,18 @@ export const Route = createFileRoute("/api/chat")({
           system: SYSTEM_PROMPT,
           messages: modelMessages,
           tools: {
-            web_search: tool({
+            web_search: tool<{ query: string; numResults?: number }, { results: Array<Record<string, unknown>>; total: number; error?: string }>({
               description: "Rechercher des informations récentes sur le web (actualités, réglementations, normes, PLU, DTU, etc.)",
-              parameters: z.object({
-                query: z.string().describe("La requête de recherche précise en français"),
-                numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
-              }),
+              inputSchema: zodSchema(
+                z.object({
+                  query: z.string().describe("La requête de recherche précise en français"),
+                  numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
+                }),
+              ),
               execute: async ({ query, numResults }) => {
                 const exaKey = process.env.EXA_API_KEY;
                 if (!exaKey) {
-                  return { error: "API Exa non configurée", results: [] };
+                  return { error: "API Exa non configurée", results: [], total: 0 };
                 }
                 try {
                   const res = await fetch("https://api.exa.ai/search", {
@@ -138,7 +139,7 @@ export const Route = createFileRoute("/api/chat")({
                   if (!res.ok) {
                     const errText = await res.text().catch(() => "unknown error");
                     console.error("[EXA] API error:", res.status, errText);
-                    return { error: `Erreur API Exa: ${res.status}`, results: [] };
+                    return { error: `Erreur API Exa: ${res.status}`, results: [], total: 0 };
                   }
                   const data = await res.json();
                   const results = (data.results ?? []).map((r: Record<string, unknown>) => ({
@@ -150,12 +151,11 @@ export const Route = createFileRoute("/api/chat")({
                   return { results, total: results.length };
                 } catch (err) {
                   console.error("[EXA] Fetch error:", err);
-                  return { error: "Erreur réseau lors de la recherche Exa", results: [] };
+                  return { error: "Erreur réseau lors de la recherche Exa", results: [], total: 0 };
                 }
               },
             }),
           },
-          maxSteps: 5,
         });
 
         return result.toUIMessageStreamResponse({

@@ -14,3 +14,11 @@ export function createCerebrasProvider() {
     baseURL: "https://api.cerebras.ai/v1",
   });
 }
+
+export function createMistralProvider(apiKey: string) {
+  return createOpenAICompatible({
+    name: "mistral",
+    baseURL: "https://api.mistral.ai/v1",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
