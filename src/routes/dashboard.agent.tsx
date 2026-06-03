@@ -9,10 +9,12 @@ import {
   Plus,
   FileText,
   Copy,
+  Check,
   RefreshCw,
   Ellipsis,
   Mic,
   PenLine,
+  Share2,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -136,6 +138,7 @@ function ChatInner({
     Array<{ id: string; title: string; updated_at: string; message_count: number }>
   >([]);
   const [loadingConvs, setLoadingConvs] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoadingConvs(true);
@@ -367,18 +370,61 @@ function ChatInner({
                 messageIdx={idx}
               />
               <div className="flex gap-3 text-[#a3a3a3] mt-1">
-                <button className="hover:text-[#e5e5e5]" title="Copier">
-                  <Copy className="w-4 h-4" />
+                <button
+                  className="hover:text-[#e5e5e5]"
+                  title="Copier"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(text);
+                    setCopiedMessageId(m.id);
+                    setTimeout(() => setCopiedMessageId(null), 2000);
+                  }}
+                >
+                  {copiedMessageId === m.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </button>
-                <button className="hover:text-[#e5e5e5]" title="Regénérer">
+                <button
+                  className="hover:text-[#e5e5e5]"
+                  title="Regénérer"
+                  onClick={() => {
+                    const lastUser = [...messages].reverse().find((msg) => msg.role === "user");
+                    if (lastUser) {
+                      const txt = lastUser.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+                      sendMessage({ text: txt });
+                    }
+                  }}
+                >
                   <RefreshCw className="w-4 h-4" />
                 </button>
-                <button className="hover:text-[#e5e5e5]" title="Partager">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                    <path d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                <button
+                  className="hover:text-[#e5e5e5]"
+                  title="Partager"
+                  onClick={async () => {
+                    const shareText = `FORMA Agent\n\n${text.slice(0, 500)}…`;
+                    if (navigator.share) {
+                      await navigator.share({ text: shareText }).catch(() => {});
+                    } else {
+                      await navigator.clipboard.writeText(shareText);
+                      setCopiedMessageId(m.id);
+                      setTimeout(() => setCopiedMessageId(null), 2000);
+                    }
+                  }}
+                >
+                  <Share2 className="w-4 h-4" />
                 </button>
-                <button className="hover:text-[#e5e5e5]" title="Plus">
+                <button
+                  className="hover:text-[#e5e5e5]"
+                  title="Plus d'options"
+                  onClick={() => {
+                    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `FORMA-message-${new Date().toISOString().slice(0, 10)}.md`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
                   <Ellipsis className="w-4 h-4" />
                 </button>
               </div>
@@ -528,12 +574,19 @@ function ChatInner({
                 type="button"
                 className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors"
                 title="Nouveau document"
+                onClick={() => {
+                  onOpenDocument({ title: "Nouveau document", content: "# Nouveau document\n\nÉcrivez ici…" });
+                }}
               >
                 <Plus className="w-5 h-5" />
               </button>
               <button
                 type="button"
                 className="flex items-center gap-1.5 bg-[#2a2a2a] border border-[#3f3f3f] text-xs px-2.5 py-1 rounded-full text-[#a3a3a3] hover:text-[#e5e5e5] transition-colors"
+                title="Canvas"
+                onClick={() => {
+                  onOpenDocument({ title: "Canvas", content: "# Canvas\n\nEspace de travail libre." });
+                }}
               >
                 <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
                 Canvas
@@ -545,9 +598,22 @@ function ChatInner({
                 <path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors ml-1 disabled:opacity-40"
+                type="button"
+                className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors ml-1"
+                title="Dictée vocale"
+                onClick={() => {
+                  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                  if (!SpeechRecognition) return;
+                  const recognition = new SpeechRecognition();
+                  recognition.lang = "fr-FR";
+                  recognition.continuous = false;
+                  recognition.interimResults = false;
+                  recognition.onresult = (event: any) => {
+                    const transcript = event.results[0][0].transcript;
+                    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                  };
+                  recognition.start();
+                }}
               >
                 <Mic className="w-5 h-5" />
               </button>

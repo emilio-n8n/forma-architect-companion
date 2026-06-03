@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
-  Download,
   Copy,
   Check,
   Maximize2,
@@ -15,9 +14,6 @@ import {
   Cloud,
   List,
   Link2,
-  Bold,
-  Italic,
-  Strikethrough,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -70,6 +66,21 @@ export function DocumentEditorPanel({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [shared, setShared] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (fullscreen) setFullscreen(false);
+        if (isEditing) setIsEditing(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [fullscreen, isEditing]);
 
   if (!doc) {
     return (
@@ -94,6 +105,21 @@ export function DocumentEditorPanel({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleShare = async () => {
+    const shareText = `FORMA Agent — ${doc.title}\n\n${doc.content.slice(0, 500)}…`;
+    if (navigator.share) {
+      await navigator.share({ text: shareText }).catch(() => {});
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    }
+  };
+
+  const handleCloud = () => {
+    downloadDocx(markdownToWordHtml(doc.content), `${safeName}.docx`);
+  };
+
   const safeName = doc.title.replace(/[^a-zA-Z0-9\u00C0-\u024F -]/g, "").trim() || "document";
 
   return (
@@ -108,32 +134,32 @@ export function DocumentEditorPanel({
         <div className="flex items-center gap-4 min-w-0">
           <span className="text-[#e5e5e5] font-medium truncate">{doc.title}</span>
           <div className="flex items-center gap-2 shrink-0">
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1" onClick={handleCloud} title="Télécharger .docx">
               <Cloud className="w-4 h-4" />
             </button>
             <div className="w-px h-4 bg-[#333] mx-1" />
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Annuler (non disponible)">
               <Undo2 className="w-4 h-4" />
             </button>
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Rétablir (non disponible)">
               <Redo2 className="w-4 h-4" />
             </button>
             <div className="w-px h-4 bg-[#333] mx-1" />
-            <span className="text-[#e5e5e5] px-2 cursor-pointer flex items-center gap-1">
-              Titre 1 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span className="text-[#e5e5e5] px-2 cursor-default flex items-center gap-1 text-xs">
+              Paragraphe <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </span>
             <div className="w-px h-4 bg-[#333] mx-1" />
-            <button className="hover:text-[#e5e5e5] p-1 font-serif font-bold">B</button>
-            <button className="hover:text-[#e5e5e5] p-1 font-serif italic">I</button>
-            <button className="hover:text-[#e5e5e5] p-1 line-through">S</button>
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1 font-serif font-bold cursor-default opacity-50" title="Gras">B</button>
+            <button className="hover:text-[#e5e5e5] p-1 font-serif italic cursor-default opacity-50" title="Italique">I</button>
+            <button className="hover:text-[#e5e5e5] p-1 line-through cursor-default opacity-50" title="Barré">S</button>
+            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste">
               <List className="w-4 h-4" />
             </button>
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste à puces">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
-            <button className="hover:text-[#e5e5e5] p-1 font-serif">fx</button>
-            <button className="hover:text-[#e5e5e5] p-1">
+            <button className="hover:text-[#e5e5e5] p-1 font-serif cursor-default opacity-50" title="Formule">fx</button>
+            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Lien">
               <Link2 className="w-4 h-4" />
             </button>
           </div>
@@ -142,8 +168,8 @@ export function DocumentEditorPanel({
           <button className="hover:text-[#e5e5e5] p-1" onClick={handleCopy} title="Copier">
             {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
           </button>
-          <button className="hover:text-[#e5e5e5] p-1" title="Partager">
-            <Share2 className="w-4 h-4" />
+          <button className="hover:text-[#e5e5e5] p-1" title="Partager" onClick={handleShare}>
+            {shared ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
           </button>
           <button
             className="bg-[#dcb383] text-black px-4 py-1.5 rounded-full font-medium text-xs flex items-center gap-1 hover:bg-[#e8c49a] transition-colors"
@@ -160,25 +186,54 @@ export function DocumentEditorPanel({
       </header>
 
       <article
-        className="flex-1 overflow-y-auto p-12 lg:p-24 pb-32 text-[#e5e5e5] font-serif leading-relaxed"
+        className={`flex-1 overflow-y-auto p-12 lg:p-24 pb-32 text-[#e5e5e5] font-serif leading-relaxed ${fullscreen ? "fixed inset-0 z-50 bg-[#171717] pt-20" : ""}`}
         data-purpose="document-content"
       >
-        <div className="prose prose-invert prose-sm max-w-none prose-headings:font-sans prose-headings:text-[#dcb383] prose-strong:text-[#dcb383] prose-a:text-[#dcb383] prose-code:text-[#dcb383] prose-code:bg-[#222] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333] prose-li:my-0.5 leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
-        </div>
+        {isEditing ? (
+          <textarea
+            className="w-full h-full min-h-[60vh] bg-transparent border-none text-[#e5e5e5] font-mono text-sm leading-relaxed resize-none focus:outline-none"
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            autoFocus
+          />
+        ) : (
+          <div className="prose prose-invert prose-sm max-w-none prose-headings:font-sans prose-headings:text-[#dcb383] prose-strong:text-[#dcb383] prose-a:text-[#dcb383] prose-code:text-[#dcb383] prose-code:bg-[#222] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333] prose-li:my-0.5 leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+          </div>
+        )}
       </article>
 
       <div
-        className="absolute bottom-6 right-6 flex flex-col gap-2 bg-[#2a2a2a] border border-[#3f3f3f] rounded-full p-2"
+        className="absolute bottom-6 right-6 flex flex-col gap-2 bg-[#2a2a2a] border border-[#3f3f3f] rounded-full p-2 shadow-lg"
         data-purpose="floating-actions"
       >
-        <button className="p-2 text-[#a3a3a3] hover:text-[#e5e5e5] hover:bg-[#3a3a3a] rounded-full transition-colors">
-          <Maximize2 className="w-4 h-4" />
+        <button
+          className="p-2 text-[#a3a3a3] hover:text-[#e5e5e5] hover:bg-[#3a3a3a] rounded-full transition-colors"
+          title={fullscreen ? "Réduire" : "Plein écran"}
+          onClick={() => setFullscreen(!fullscreen)}
+        >
+          {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
-        <button className="p-2 text-[#a3a3a3] hover:text-[#e5e5e5] hover:bg-[#3a3a3a] rounded-full transition-colors">
+        <button
+          className="p-2 text-[#a3a3a3] hover:text-[#e5e5e5] hover:bg-[#3a3a3a] rounded-full transition-colors"
+          title="Paramètres"
+          onClick={() => {
+            const el = document.querySelector('[data-purpose="document-content"]');
+            el?.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
           <Settings className="w-4 h-4" />
         </button>
-        <button className="p-2 text-[#dcb383] hover:bg-[#3a3a3a] rounded-full transition-colors">
+        <button
+          className="p-2 text-[#dcb383] hover:bg-[#3a3a3a] rounded-full transition-colors"
+          title={isEditing ? "Terminer l'édition" : "Modifier"}
+          onClick={() => {
+            if (!isEditing) {
+              setEditContent(doc.content);
+            }
+            setIsEditing(!isEditing);
+          }}
+        >
           <PenLine className="w-4 h-4" />
         </button>
       </div>
