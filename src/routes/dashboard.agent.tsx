@@ -49,6 +49,7 @@ function AgentPage() {
   const [convId, setConvId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
   const [activeDocument, setActiveDocument] = useState<{ title: string; content: string } | null>(null);
+  const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -102,9 +103,29 @@ function AgentPage() {
           setConvId(id);
         }}
         onSwitchConversation={switchConversation}
-        onOpenDocument={setActiveDocument}
+        onOpenDocument={(doc) => {
+          setActiveDocument(doc);
+          if (doc) setShowPanel(true);
+        }}
       />
-      <DocumentEditorPanel document={activeDocument} onClose={() => setActiveDocument(null)} />
+      {showPanel ? (
+        <div className="flex-1 flex min-w-0">
+          <DocumentEditorPanel
+            document={activeDocument}
+            onClose={() => { setActiveDocument(null); setShowPanel(false); }}
+          />
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowPanel(true)}
+          className="self-center p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#222] transition-colors shrink-0"
+          title="Afficher le panneau"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

@@ -88,7 +88,12 @@ export function DocumentEditorPanel({
         className="flex-1 bg-[#171717] rounded-[24px] border border-[#333] flex flex-col overflow-hidden relative"
         data-purpose="document-panel"
       >
-        <div className="flex-1 flex items-center justify-center text-[#a3a3a3] text-sm">
+        <div className="flex items-center justify-end px-4 py-2">
+          <button className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-lg hover:bg-[#333] transition-colors" onClick={onClose} title="Fermer le panneau">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-[#a3a3a3] text-sm -mt-8">
           <div className="text-center">
             <FileText className="w-12 h-12 mx-auto mb-4 opacity-30" />
             <p>Sélectionnez un document dans la conversation</p>
