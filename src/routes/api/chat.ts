@@ -109,7 +109,7 @@ export const Route = createFileRoute("/api/chat")({
           system: SYSTEM_PROMPT,
           messages: modelMessages,
           tools: {
-            web_search: tool({
+            web_search: tool<{ query: string; numResults?: number }, { results: Array<Record<string, unknown>>; total: number; error?: string }>({
               description: "Rechercher des informations récentes sur le web (actualités, réglementations, normes, PLU, DTU, etc.)",
               parameters: zodSchema(
                 z.object({
@@ -117,10 +117,10 @@ export const Route = createFileRoute("/api/chat")({
                   numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
                 }),
               ),
-              execute: async ({ query, numResults }: { query: string; numResults?: number }) => {
+              execute: async ({ query, numResults }) => {
                 const exaKey = process.env.EXA_API_KEY;
                 if (!exaKey) {
-                  return { error: "API Exa non configurée", results: [] as Array<Record<string, unknown>>, total: 0 };
+                  return { error: "API Exa non configurée", results: [], total: 0 };
                 }
                 try {
                   const res = await fetch("https://api.exa.ai/search", {
@@ -139,7 +139,7 @@ export const Route = createFileRoute("/api/chat")({
                   if (!res.ok) {
                     const errText = await res.text().catch(() => "unknown error");
                     console.error("[EXA] API error:", res.status, errText);
-                    return { error: `Erreur API Exa: ${res.status}`, results: [] as Array<Record<string, unknown>>, total: 0 };
+                    return { error: `Erreur API Exa: ${res.status}`, results: [], total: 0 };
                   }
                   const data = await res.json();
                   const results = (data.results ?? []).map((r: Record<string, unknown>) => ({
@@ -151,7 +151,7 @@ export const Route = createFileRoute("/api/chat")({
                   return { results, total: results.length };
                 } catch (err) {
                   console.error("[EXA] Fetch error:", err);
-                  return { error: "Erreur réseau lors de la recherche Exa", results: [] as Array<Record<string, unknown>>, total: 0 };
+                  return { error: "Erreur réseau lors de la recherche Exa", results: [], total: 0 };
                 }
               },
             }),
