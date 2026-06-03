@@ -120,7 +120,7 @@ export const Route = createFileRoute("/api/chat")({
               execute: async ({ query, numResults }: { query: string; numResults?: number }) => {
                 const exaKey = process.env.EXA_API_KEY;
                 if (!exaKey) {
-                  return { error: "API Exa non configurée", results: [] };
+                  return { error: "API Exa non configurée", results: [] as Array<Record<string, unknown>>, total: 0 };
                 }
                 try {
                   const res = await fetch("https://api.exa.ai/search", {
@@ -139,7 +139,7 @@ export const Route = createFileRoute("/api/chat")({
                   if (!res.ok) {
                     const errText = await res.text().catch(() => "unknown error");
                     console.error("[EXA] API error:", res.status, errText);
-                    return { error: `Erreur API Exa: ${res.status}`, results: [] };
+                    return { error: `Erreur API Exa: ${res.status}`, results: [] as Array<Record<string, unknown>>, total: 0 };
                   }
                   const data = await res.json();
                   const results = (data.results ?? []).map((r: Record<string, unknown>) => ({
@@ -151,7 +151,7 @@ export const Route = createFileRoute("/api/chat")({
                   return { results, total: results.length };
                 } catch (err) {
                   console.error("[EXA] Fetch error:", err);
-                  return { error: "Erreur réseau lors de la recherche Exa", results: [] };
+                  return { error: "Erreur réseau lors de la recherche Exa", results: [] as Array<Record<string, unknown>>, total: 0 };
                 }
               },
             }),
