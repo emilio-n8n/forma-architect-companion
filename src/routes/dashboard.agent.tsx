@@ -12,9 +12,11 @@ import {
   Check,
   RefreshCw,
   Ellipsis,
-  Mic,
   PenLine,
   Share2,
+  Send,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -30,8 +32,6 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { SpreadsheetPreview } from "@/components/SpreadsheetPreview";
-import { EmailPreview } from "@/components/EmailPreview";
 import { DocumentEditorPanel } from "@/components/DocumentEditorPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -48,7 +48,7 @@ function AgentPage() {
 
   const [convId, setConvId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
-  const [activeDocument, setActiveDocument] = useState<{ title: string; content: string } | null>(null);
+  const [activeContent, setActiveContent] = useState<{ type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null>(null);
   const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
@@ -90,41 +90,32 @@ function AgentPage() {
 
   return (
     <div className="flex w-full gap-4 overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)", padding: "1rem", backgroundColor: "#090909" }}>
-      <ChatInner
-        key={convId}
-        convId={convId}
-        initialMessages={initialMessages}
-        onSave={(role, content) => saveFn({ data: { conversationId: convId, role, content } }).catch(() => {})}
-        onReset={async () => {
-          const { id } = await resetFn();
-          setInitialMessages(null);
-          setConvId(null);
-          setInitialMessages([]);
-          setConvId(id);
-        }}
-        onSwitchConversation={switchConversation}
-        onOpenDocument={(doc) => {
-          setActiveDocument(doc);
-          if (doc) setShowPanel(true);
-        }}
-      />
-      {showPanel ? (
+      <div className={showPanel ? "w-[350px] min-w-[300px] shrink-0" : "flex-1 max-w-[600px]"}>
+        <ChatInner
+          key={convId}
+          convId={convId}
+          initialMessages={initialMessages}
+          onSave={(role, content) => saveFn({ data: { conversationId: convId, role, content } }).catch(() => {})}
+          onReset={async () => {
+            const { id } = await resetFn();
+            setInitialMessages(null);
+            setConvId(null);
+            setInitialMessages([]);
+            setConvId(id);
+          }}
+          onSwitchConversation={switchConversation}
+          onOpenContent={setActiveContent}
+          showPanel={showPanel}
+          onTogglePanel={() => setShowPanel(!showPanel)}
+        />
+      </div>
+      {showPanel && (
         <div className="flex-1 flex min-w-0">
           <DocumentEditorPanel
-            document={activeDocument}
-            onClose={() => { setActiveDocument(null); setShowPanel(false); }}
+            content={activeContent}
+            onClose={() => { setActiveContent(null); setShowPanel(false); }}
           />
         </div>
-      ) : (
-        <button
-          onClick={() => setShowPanel(true)}
-          className="self-center p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#222] transition-colors shrink-0"
-          title="Afficher le panneau"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
       )}
     </div>
   );
@@ -136,14 +127,18 @@ function ChatInner({
   onSave,
   onReset,
   onSwitchConversation,
-  onOpenDocument,
+  onOpenContent,
+  showPanel,
+  onTogglePanel,
 }: {
   convId: string;
   initialMessages: UIMessage[];
   onSave: (role: "user" | "assistant", content: string) => void;
   onReset: () => void;
   onSwitchConversation: (id: string) => Promise<void>;
-  onOpenDocument: (doc: { title: string; content: string } | null) => void;
+  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
+  showPanel: boolean;
+  onTogglePanel: () => void;
 }) {
   const suggestFn = useServerFn(generateSuggestions);
   const listFn = useServerFn(listConversations);
@@ -264,7 +259,7 @@ function ChatInner({
 
   return (
     <section
-      className="flex flex-col w-[350px] min-w-[300px] h-full min-h-0 overflow-hidden"
+      className="flex flex-col h-full min-h-0 overflow-hidden"
       data-purpose="chat-sidebar"
       style={{ backgroundColor: "#090909" }}
     >
@@ -272,6 +267,13 @@ function ChatInner({
       <div className="flex items-center justify-between px-2 py-3 shrink-0">
         <span className="text-xs text-[#a3a3a3] uppercase tracking-widest font-medium">FORMA</span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={onTogglePanel}
+            className={`p-1.5 rounded-full hover:bg-[#1a1a1a] transition-colors ${showPanel ? "text-[#dcb383]" : "text-[#a3a3a3] hover:text-[#e5e5e5]"}`}
+            title={showPanel ? "Masquer le panneau" : "Afficher le panneau"}
+          >
+            {showPanel ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+          </button>
           <button
             onClick={onReset}
             className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#1a1a1a] transition-colors"
@@ -387,7 +389,7 @@ function ChatInner({
             <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed text-[#d4d4d4]">
               <ReactMarkdownContent
                 text={text}
-                onOpenDocument={onOpenDocument}
+                onOpenContent={onOpenContent}
                 messageIdx={idx}
               />
               <div className="flex gap-3 text-[#a3a3a3] mt-1">
@@ -596,7 +598,7 @@ function ChatInner({
                 className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors"
                 title="Nouveau document"
                 onClick={() => {
-                  onOpenDocument({ title: "Nouveau document", content: "# Nouveau document\n\nÉcrivez ici…" });
+                  onOpenContent({ type: "doc", title: "Nouveau document", content: "# Nouveau document\n\nÉcrivez ici…" });
                 }}
               >
                 <Plus className="w-5 h-5" />
@@ -606,7 +608,7 @@ function ChatInner({
                 className="flex items-center gap-1.5 bg-[#2a2a2a] border border-[#3f3f3f] text-xs px-2.5 py-1 rounded-full text-[#a3a3a3] hover:text-[#e5e5e5] transition-colors"
                 title="Canvas"
                 onClick={() => {
-                  onOpenDocument({ title: "Canvas", content: "# Canvas\n\nEspace de travail libre." });
+                  onOpenContent({ type: "doc", title: "Canvas", content: "# Canvas\n\nEspace de travail libre." });
                 }}
               >
                 <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
@@ -614,29 +616,13 @@ function ChatInner({
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#666]">Flash-Lite</span>
-              <svg className="w-3 h-3 text-[#666]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                <path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
               <button
-                type="button"
-                className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors ml-1"
-                title="Dictée vocale"
-                onClick={() => {
-                  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-                  if (!SpeechRecognition) return;
-                  const recognition = new SpeechRecognition();
-                  recognition.lang = "fr-FR";
-                  recognition.continuous = false;
-                  recognition.interimResults = false;
-                  recognition.onresult = (event: any) => {
-                    const transcript = event.results[0][0].transcript;
-                    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-                  };
-                  recognition.start();
-                }}
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors disabled:opacity-40"
+                title="Envoyer"
               >
-                <Mic className="w-5 h-5" />
+                <Send className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -648,11 +634,11 @@ function ChatInner({
 
 function ReactMarkdownContent({
   text,
-  onOpenDocument,
+  onOpenContent,
   messageIdx,
 }: {
   text: string;
-  onOpenDocument: (doc: { title: string; content: string } | null) => void;
+  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
   messageIdx: number;
 }) {
   const renderers = {
@@ -673,11 +659,10 @@ function ReactMarkdownContent({
       const lang = className?.replace(/^language-/, "") ?? "";
       if (!isInline && lang === "doc") {
         const title = content.split("\n")[0]?.replace(/^#+\s*/, "").trim();
-        const key = `doc-${messageIdx}`;
         return (
           <div
             className="border border-[#333] rounded-2xl p-4 flex items-center gap-3 bg-[#171717] cursor-pointer hover:bg-[#1e1e1e] transition-colors my-3"
-            onClick={() => onOpenDocument({ title: title || "Document", content })}
+            onClick={() => onOpenContent({ type: "doc", title: title || "Document", content })}
           >
             <div className="text-[#a3a3a3]">
               <FileText className="w-6 h-6" />
@@ -697,10 +682,50 @@ function ReactMarkdownContent({
         );
       }
       if (!isInline && lang === "spreadsheet") {
-        return <SpreadsheetPreview json={content} />;
+        let title = "Tableur";
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed.title) title = parsed.title;
+        } catch {}
+        return (
+          <div
+            className="border border-[#333] rounded-2xl p-4 flex items-center gap-3 bg-[#171717] cursor-pointer hover:bg-[#1e1e1e] transition-colors my-3"
+            onClick={() => onOpenContent({ type: "spreadsheet", title, content })}
+          >
+            <div className="text-[#a3a3a3]">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m0 0V5.625M12 18.375c0 .621-.504 1.125-1.125 1.125H4.5M12 5.625V3.375c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25M12 5.625h7.5" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-[#e5e5e5] text-sm truncate">{title}</h4>
+              <p className="text-xs text-[#a3a3a3] mt-0.5">Tableau de données · cliquer pour ouvrir</p>
+            </div>
+          </div>
+        );
       }
       if (!isInline && lang === "email") {
-        return <EmailPreview json={content} />;
+        let subject = "Email";
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed.subject) subject = parsed.subject;
+        } catch {}
+        return (
+          <div
+            className="border border-[#333] rounded-2xl p-4 flex items-center gap-3 bg-[#171717] cursor-pointer hover:bg-[#1e1e1e] transition-colors my-3"
+            onClick={() => onOpenContent({ type: "email", title: subject, content })}
+          >
+            <div className="text-[#a3a3a3]">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-[#e5e5e5] text-sm truncate">{subject}</h4>
+              <p className="text-xs text-[#a3a3a3] mt-0.5">Email · cliquer pour ouvrir</p>
+            </div>
+          </div>
+        );
       }
       if (isInline) {
         return (

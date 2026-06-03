@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SpreadsheetPreview } from "./SpreadsheetPreview";
+import { EmailPreview } from "./EmailPreview";
 
 function markdownToWordHtml(md: string): string {
   const body = md
@@ -59,12 +61,13 @@ function downloadDocx(html: string, filename: string) {
 }
 
 export function DocumentEditorPanel({
-  document: doc,
+  content,
   onClose,
 }: {
-  document: { title: string; content: string } | null;
+  content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null;
   onClose: () => void;
 }) {
+  const doc = content;
   const [copied, setCopied] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -138,35 +141,45 @@ export function DocumentEditorPanel({
       >
         <div className="flex items-center gap-4 min-w-0">
           <span className="text-[#e5e5e5] font-medium truncate">{doc.title}</span>
+          {doc.type === "spreadsheet" && (
+            <span className="text-[10px] uppercase tracking-wider text-[#dcb383] bg-[#dcb383]/10 px-2 py-0.5 rounded-full">Tableur</span>
+          )}
+          {doc.type === "email" && (
+            <span className="text-[10px] uppercase tracking-wider text-[#dcb383] bg-[#dcb383]/10 px-2 py-0.5 rounded-full">Email</span>
+          )}
           <div className="flex items-center gap-2 shrink-0">
-            <button className="hover:text-[#e5e5e5] p-1" onClick={handleCloud} title="Télécharger .docx">
-              <Cloud className="w-4 h-4" />
-            </button>
-            <div className="w-px h-4 bg-[#333] mx-1" />
-            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Annuler (non disponible)">
-              <Undo2 className="w-4 h-4" />
-            </button>
-            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Rétablir (non disponible)">
-              <Redo2 className="w-4 h-4" />
-            </button>
-            <div className="w-px h-4 bg-[#333] mx-1" />
-            <span className="text-[#e5e5e5] px-2 cursor-default flex items-center gap-1 text-xs">
-              Paragraphe <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </span>
-            <div className="w-px h-4 bg-[#333] mx-1" />
-            <button className="hover:text-[#e5e5e5] p-1 font-serif font-bold cursor-default opacity-50" title="Gras">B</button>
-            <button className="hover:text-[#e5e5e5] p-1 font-serif italic cursor-default opacity-50" title="Italique">I</button>
-            <button className="hover:text-[#e5e5e5] p-1 line-through cursor-default opacity-50" title="Barré">S</button>
-            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste">
-              <List className="w-4 h-4" />
-            </button>
-            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste à puces">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-            <button className="hover:text-[#e5e5e5] p-1 font-serif cursor-default opacity-50" title="Formule">fx</button>
-            <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Lien">
-              <Link2 className="w-4 h-4" />
-            </button>
+            {doc.type === "doc" && (
+              <>
+                <button className="hover:text-[#e5e5e5] p-1" onClick={handleCloud} title="Télécharger .docx">
+                  <Cloud className="w-4 h-4" />
+                </button>
+                <div className="w-px h-4 bg-[#333] mx-1" />
+                <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Annuler (non disponible)">
+                  <Undo2 className="w-4 h-4" />
+                </button>
+                <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Rétablir (non disponible)">
+                  <Redo2 className="w-4 h-4" />
+                </button>
+                <div className="w-px h-4 bg-[#333] mx-1" />
+                <span className="text-[#e5e5e5] px-2 cursor-default flex items-center gap-1 text-xs">
+                  Paragraphe <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </span>
+                <div className="w-px h-4 bg-[#333] mx-1" />
+                <button className="hover:text-[#e5e5e5] p-1 font-serif font-bold cursor-default opacity-50" title="Gras">B</button>
+                <button className="hover:text-[#e5e5e5] p-1 font-serif italic cursor-default opacity-50" title="Italique">I</button>
+                <button className="hover:text-[#e5e5e5] p-1 line-through cursor-default opacity-50" title="Barré">S</button>
+                <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste">
+                  <List className="w-4 h-4" />
+                </button>
+                <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Liste à puces">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+                <button className="hover:text-[#e5e5e5] p-1 font-serif cursor-default opacity-50" title="Formule">fx</button>
+                <button className="hover:text-[#e5e5e5] p-1 cursor-default opacity-50" title="Lien">
+                  <Link2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -176,14 +189,16 @@ export function DocumentEditorPanel({
           <button className="hover:text-[#e5e5e5] p-1" title="Partager" onClick={handleShare}>
             {shared ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
           </button>
-          <button
-            className="bg-[#dcb383] text-black px-4 py-1.5 rounded-full font-medium text-xs flex items-center gap-1 hover:bg-[#e8c49a] transition-colors"
-            onClick={() => downloadDocx(markdownToWordHtml(doc.content), `${safeName}.docx`)}
-            title="Créer le document"
-          >
-            Créer
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
+          {doc.type === "doc" && (
+            <button
+              className="bg-[#dcb383] text-black px-4 py-1.5 rounded-full font-medium text-xs flex items-center gap-1 hover:bg-[#e8c49a] transition-colors"
+              onClick={() => downloadDocx(markdownToWordHtml(doc.content), `${safeName}.docx`)}
+              title="Télécharger .docx"
+            >
+              Créer
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          )}
           <button className="hover:text-[#e5e5e5] p-1 ml-2" onClick={onClose}>
             <X className="w-4 h-4" />
           </button>
@@ -191,19 +206,30 @@ export function DocumentEditorPanel({
       </header>
 
       <article
-        className={`flex-1 overflow-y-auto p-12 lg:p-24 pb-32 text-[#e5e5e5] font-serif leading-relaxed ${fullscreen ? "fixed inset-0 z-50 bg-[#171717] pt-20" : ""}`}
+        className={`flex-1 overflow-y-auto p-8 lg:p-16 pb-32 text-[#e5e5e5] leading-relaxed ${fullscreen ? "fixed inset-0 z-50 bg-[#171717] pt-20" : ""}`}
         data-purpose="document-content"
       >
-        {isEditing ? (
+        {doc.type === "doc" && isEditing && (
           <textarea
             className="w-full h-full min-h-[60vh] bg-transparent border-none text-[#e5e5e5] font-mono text-sm leading-relaxed resize-none focus:outline-none"
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             autoFocus
           />
-        ) : (
+        )}
+        {doc.type === "doc" && !isEditing && (
           <div className="prose prose-invert prose-sm max-w-none prose-headings:font-sans prose-headings:text-[#dcb383] prose-strong:text-[#dcb383] prose-a:text-[#dcb383] prose-code:text-[#dcb383] prose-code:bg-[#222] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333] prose-li:my-0.5 leading-relaxed">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+          </div>
+        )}
+        {doc.type === "spreadsheet" && (
+          <div className="max-w-full">
+            <SpreadsheetPreview json={doc.content} />
+          </div>
+        )}
+        {doc.type === "email" && (
+          <div className="max-w-full">
+            <EmailPreview json={doc.content} />
           </div>
         )}
       </article>
