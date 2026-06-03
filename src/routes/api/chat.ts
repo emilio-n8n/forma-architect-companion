@@ -1,6 +1,5 @@
-import "@tanstack/react-start";
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, tool, type UIMessage } from "ai";
+import { streamText, tool, zodSchema, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
 import { z } from "zod";
