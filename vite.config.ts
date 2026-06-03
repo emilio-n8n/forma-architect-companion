@@ -23,7 +23,7 @@ export default defineConfig({
           "style-src 'self' 'unsafe-inline'; " +
           "img-src 'self' data: https: blob:; " +
           "font-src 'self'; " +
-          "connect-src 'self' https://api.cerebras.ai https://ai.gateway.lovable.dev; " +
+          "connect-src 'self' https://api.mistral.ai https://ai.gateway.lovable.dev; " +
           "frame-src 'none'; " +
           "object-src 'none'; " +
           "base-uri 'self'; " +
