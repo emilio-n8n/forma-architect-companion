@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, tool, zodSchema, type UIMessage } from "ai";
+import { streamText, type UIMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
-import { z } from "zod";
 
 const SYSTEM_PROMPT = `Tu es FORMA Agent, un assistant IA spécialisé en architecture française.
 Tu maîtrises le PLU, la RT/RE2020, le label BBC, les normes d'accessibilité PMR,
@@ -16,17 +15,13 @@ Exemple : **[RF: Article L. 111-1]** Code de l'urbanisme — obligation de permi
 Exemple : **[RF: DTU 13.3]** Fondations superficielles — disposition constructives.
 Exemple : **[RF: RE2020]** Exigence de performance énergétique — seuil Bbio ≤ Bbiomax.
 
-## Capacités spéciales
+## Recherche web
+Tu peux faire des recherches web via Exa pour trouver des informations récentes.
+Quand l'utilisateur te demande une recherche, réponds avec le marqueur suivant :
+[EXA: ta requête de recherche]
+Puis attends les résultats que l'utilisateur te fournira pour répondre.
 
-Tu peux utiliser les outils suivants :
-
-### Recherche web (web_search)
-Utilise cet outil quand tu as besoin d'informations récentes, de textes de loi à jour,
-de jurisprudences, de normes techniques actualisées, ou de toute information que tu ne connais pas avec certitude.
-Exemples : recherche du PLU d'une commune, vérification d'un article de loi récent,
-actualité réglementaire, DTU mis à jour.
-
-### Création de documents
+## Création de documents
 Quand on te demande de rédiger une note, un courrier, un rapport ou tout document structuré,
 encadre-le dans un bloc de code markdown avec le langage \`doc\` :
 \`\`\`doc
@@ -35,7 +30,7 @@ Titre du document
 Contenu en markdown...
 \`\`\`
 
-### Création de tableaux / tableurs
+## Création de tableaux / tableurs
 Quand on te demande des données chiffrées, des comparaisons, des devis ou tout tableau structuré,
 encadre-les dans un bloc \`spreadsheet\` avec du JSON :
 \`\`\`spreadsheet
@@ -51,7 +46,7 @@ encadre-les dans un bloc \`spreadsheet\` avec du JSON :
 }
 \`\`\`
 
-### Rédaction d'emails
+## Rédaction d'emails
 Quand on te demande de rédiger un email professionnel, encadre-le dans un bloc \`email\` avec du JSON :
 \`\`\`email
 {
@@ -108,54 +103,6 @@ export const Route = createFileRoute("/api/chat")({
           model: mistral("mistral-large-latest"),
           system: SYSTEM_PROMPT,
           messages: modelMessages,
-          tools: {
-            web_search: tool<{ query: string; numResults?: number }, { results: Array<Record<string, unknown>>; total: number; error?: string }>({
-              description: "Rechercher des informations récentes sur le web (actualités, réglementations, normes, PLU, DTU, etc.)",
-              inputSchema: zodSchema(
-                z.object({
-                  query: z.string().describe("La requête de recherche précise en français"),
-                  numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
-                }),
-              ),
-              execute: async ({ query, numResults }) => {
-                const exaKey = process.env.EXA_API_KEY;
-                if (!exaKey) {
-                  return { error: "API Exa non configurée", results: [], total: 0 };
-                }
-                try {
-                  const res = await fetch("https://api.exa.ai/search", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "x-api-key": exaKey,
-                    },
-                    body: JSON.stringify({
-                      query,
-                      numResults: Math.min(numResults ?? 8, 15),
-                      type: "auto",
-                      useAutoprompt: true,
-                    }),
-                  });
-                  if (!res.ok) {
-                    const errText = await res.text().catch(() => "unknown error");
-                    console.error("[EXA] API error:", res.status, errText);
-                    return { error: `Erreur API Exa: ${res.status}`, results: [], total: 0 };
-                  }
-                  const data = await res.json();
-                  const results = (data.results ?? []).map((r: Record<string, unknown>) => ({
-                    title: r.title || "Sans titre",
-                    url: r.url || "",
-                    text: typeof r.text === "string" ? r.text.slice(0, 2000) : "",
-                    score: r.score ?? null,
-                  }));
-                  return { results, total: results.length };
-                } catch (err) {
-                  console.error("[EXA] Fetch error:", err);
-                  return { error: "Erreur réseau lors de la recherche Exa", results: [], total: 0 };
-                }
-              },
-            }),
-          },
         });
 
         return result.toUIMessageStreamResponse({

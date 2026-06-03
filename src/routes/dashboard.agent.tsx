@@ -2,13 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, MessageSquare, RotateCcw, Download, History, Trash2, FileText } from "lucide-react";
+import { Send, Loader2, MessageSquare, RotateCcw, Download, History, Trash2, FileText, Search, Globe, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useServerFn } from "@tanstack/react-start";
-import { ensureConversation, loadMessages, saveMessage, resetConversation, generateSuggestions, listConversations, deleteConversation } from "@/lib/chat.functions";
+import { ensureConversation, loadMessages, saveMessage, resetConversation, generateSuggestions, listConversations, deleteConversation, searchWeb } from "@/lib/chat.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -143,8 +143,13 @@ function ChatInner({
   const suggestFn = useServerFn(generateSuggestions);
   const listFn = useServerFn(listConversations);
   const deleteFn = useServerFn(deleteConversation);
+  const searchWebFn = useServerFn(searchWeb);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ title: string; url: string; text: string }> | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; updated_at: string; message_count: number }>>([]);
   const [loadingConvs, setLoadingConvs] = useState(false);
 
@@ -166,6 +171,24 @@ function ChatInner({
         .join("")
         .trim();
       if (text) onSave("assistant", text);
+
+      const exaMatch = text.match(/\[EXA:\s*(.+?)\]/);
+      if (exaMatch) {
+        const query = exaMatch[1].trim();
+        setSearchQuery(query);
+        setSearchLoading(true);
+        searchWebFn({ data: { query } })
+          .then((res) => {
+            if (res.results && res.results.length > 0) {
+              setSearchResults(res.results as Array<{ title: string; url: string; text: string }>);
+            } else {
+              setSearchResults([]);
+            }
+          })
+          .catch(() => setSearchResults([]))
+          .finally(() => setSearchLoading(false));
+      }
+
       if (text && messages.length >= 2) {
         const recent = [...messages, message]
           .slice(-4)
@@ -397,6 +420,71 @@ function ChatInner({
           );
         })}
 
+        {searchLoading && (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" /> Recherche web en cours…
+          </div>
+        )}
+
+        {searchResults !== null && !searchLoading && (
+          <div className="border border-primary/20 rounded-lg overflow-hidden bg-card">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-primary/5 border-b border-primary/20">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Résultats web</span>
+                <span className="text-xs text-muted-foreground">({searchResults.length} résultat{searchResults.length > 1 ? "s" : ""})</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSearchResults(null)}
+              >
+                Fermer
+              </Button>
+            </div>
+            {searchResults.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+                Aucun résultat trouvé
+              </div>
+            ) : (
+              <div className="max-h-[40vh] overflow-y-auto divide-y divide-border/20">
+                {searchResults.map((r, i) => (
+                  <div key={i} className="px-4 py-3 hover:bg-muted/20 transition-colors">
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {r.title}
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{r.url}</p>
+                    <p className="text-xs text-foreground/70 mt-1 line-clamp-2">{r.text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="px-4 py-2 border-t border-primary/20 bg-primary/5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs w-full"
+                onClick={() => {
+                  const context = searchResults
+                    .map((r, i) => `${i + 1}. ${r.title} (${r.url})\n   ${r.text.slice(0, 300)}`)
+                    .join("\n\n");
+                  setInput(`Suite de la conversation avec ces résultats de recherche :\n\n${context}\n\n`);
+                  setSearchResults(null);
+                }}
+              >
+                Utiliser ces résultats dans la conversation
+              </Button>
+            </div>
+          </div>
+        )}
+
         {suggestions && status !== "submitted" && status !== "streaming" && (
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s, i) => (
@@ -418,27 +506,75 @@ function ChatInner({
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-border/40 p-4 flex gap-2 bg-card">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit(e);
-            }
-          }}
-          placeholder="Posez votre question d'architecture…"
-          rows={2}
-          className="flex-1 resize-none bg-background border-border focus-visible:ring-primary"
-        />
-        <Button
-          type="submit"
-          disabled={loading || !input.trim()}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 self-end h-10 w-10 p-0"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+      <form onSubmit={handleSubmit} className="border-t border-border/40 bg-card">
+        {showSearch && (
+          <div className="flex gap-2 px-4 pt-3">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter" && searchQuery.trim() && !searchLoading) {
+                  setSearchLoading(true);
+                  setSearchResults(null);
+                  const res = await searchWebFn({ data: { query: searchQuery.trim() } }).catch(() => ({ results: [] }));
+                  setSearchResults((res.results ?? []) as Array<{ title: string; url: string; text: string }>);
+                  setSearchLoading(false);
+                }
+              }}
+              placeholder="Rechercher sur le web…"
+              className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9"
+              disabled={searchLoading || !searchQuery.trim()}
+              onClick={async () => {
+                setSearchLoading(true);
+                setSearchResults(null);
+                const res = await searchWebFn({ data: { query: searchQuery.trim() } }).catch(() => ({ results: [] }));
+                setSearchResults((res.results ?? []) as Array<{ title: string; url: string; text: string }>);
+                setSearchLoading(false);
+              }}
+            >
+              {searchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+              Chercher
+            </Button>
+          </div>
+        )}
+        <div className="flex gap-2 p-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 self-end text-muted-foreground hover:text-primary"
+            onClick={() => setShowSearch(!showSearch)}
+            title="Recherche web"
+          >
+            <Globe className="h-4 w-4" />
+          </Button>
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+            placeholder="Posez votre question d'architecture…"
+            rows={2}
+            className="flex-1 resize-none bg-background border-border focus-visible:ring-primary"
+          />
+          <Button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 self-end h-10 w-10 p-0"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </form>
     </div>
   );

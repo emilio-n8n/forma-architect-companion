@@ -211,3 +211,44 @@ export const generateSuggestions = createServerFn({ method: "POST" })
       return [];
     }
   });
+
+export const searchWeb = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ query: z.string().min(1).max(500) }).parse(d))
+  .handler(async ({ data }) => {
+    const exaKey = process.env.EXA_API_KEY;
+    if (!exaKey) {
+      return { error: "API Exa non configurée", results: [] };
+    }
+    try {
+      const res = await fetch("https://api.exa.ai/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": exaKey,
+        },
+        body: JSON.stringify({
+          query: data.query,
+          numResults: 8,
+          type: "auto",
+          useAutoprompt: true,
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "unknown error");
+        console.error("[EXA] API error:", res.status, errText);
+        return { error: `Erreur API Exa: ${res.status}`, results: [] };
+      }
+      const json = await res.json();
+      const results = (json.results ?? []).map((r: Record<string, unknown>) => ({
+        title: r.title || "Sans titre",
+        url: r.url || "",
+        text: typeof r.text === "string" ? r.text.slice(0, 2000) : "",
+        score: r.score ?? null,
+      }));
+      return { results, total: results.length };
+    } catch (err) {
+      console.error("[EXA] Fetch error:", err);
+      return { error: "Erreur réseau lors de la recherche Exa", results: [] };
+    }
+  });
