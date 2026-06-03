@@ -112,11 +112,13 @@ export const Route = createFileRoute("/api/chat")({
           tools: {
             web_search: tool({
               description: "Rechercher des informations récentes sur le web (actualités, réglementations, normes, PLU, DTU, etc.)",
-              parameters: z.object({
-                query: z.string().describe("La requête de recherche précise en français"),
-                numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
-              }),
-              execute: async ({ query, numResults }) => {
+              parameters: zodSchema(
+                z.object({
+                  query: z.string().describe("La requête de recherche précise en français"),
+                  numResults: z.number().optional().default(8).describe("Nombre de résultats souhaités (max 15)"),
+                }),
+              ),
+              execute: async ({ query, numResults }: { query: string; numResults?: number }) => {
                 const exaKey = process.env.EXA_API_KEY;
                 if (!exaKey) {
                   return { error: "API Exa non configurée", results: [] };
@@ -155,7 +157,6 @@ export const Route = createFileRoute("/api/chat")({
               },
             }),
           },
-          maxSteps: 5,
         });
 
         return result.toUIMessageStreamResponse({
