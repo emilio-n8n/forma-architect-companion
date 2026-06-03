@@ -172,23 +172,6 @@ function ChatInner({
         .trim();
       if (text) onSave("assistant", text);
 
-      const exaMatch = text.match(/\[EXA:\s*(.+?)\]/);
-      if (exaMatch) {
-        const query = exaMatch[1].trim();
-        setSearchQuery(query);
-        setSearchLoading(true);
-        searchWebFn({ data: { query } })
-          .then((res) => {
-            if (res.results && res.results.length > 0) {
-              setSearchResults(res.results as Array<{ title: string; url: string; text: string }>);
-            } else {
-              setSearchResults([]);
-            }
-          })
-          .catch(() => setSearchResults([]))
-          .finally(() => setSearchLoading(false));
-      }
-
       if (text && messages.length >= 2) {
         const recent = [...messages, message]
           .slice(-4)
@@ -216,6 +199,25 @@ function ChatInner({
     const text = input;
     setInput("");
     setSuggestions(null);
+
+    const needsSearch = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(text);
+    if (needsSearch) {
+      setSearchLoading(true);
+      setSearchResults(null);
+      const res = await searchWebFn({ data: { query: text } }).catch(() => ({ results: [] }));
+      setSearchLoading(false);
+      if (res.results && res.results.length > 0) {
+        const context = (res.results as Array<{ title: string; url: string; text: string }>)
+          .slice(0, 5)
+          .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.text.slice(0, 500)}`)
+          .join("\n\n");
+        const augmented = `${text}\n\nRésultats de recherche :\n${context}`;
+        onSave("user", augmented);
+        await sendMessage({ text: augmented });
+        return;
+      }
+    }
+
     onSave("user", text);
     await sendMessage({ text });
   };
