@@ -11,12 +11,12 @@ import {
   Copy,
   Check,
   RefreshCw,
-  Ellipsis,
-  PenLine,
   Share2,
   Send,
   PanelRightOpen,
   PanelRightClose,
+  Globe,
+  PenLine,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
