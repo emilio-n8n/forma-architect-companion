@@ -90,7 +90,7 @@ function AgentPage() {
 
   return (
     <div className="flex w-full gap-4 overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)", padding: "1rem", backgroundColor: "#090909" }}>
-      <div className={showPanel ? "w-[350px] min-w-[300px] shrink-0" : "flex-1 max-w-[600px]"}>
+      <div className={showPanel ? "w-[350px] min-w-[300px] shrink-0" : "flex-1 max-w-[760px] mx-auto"}>
         <ChatInner
           key={convId}
           convId={convId}
@@ -104,7 +104,7 @@ function AgentPage() {
             setConvId(id);
           }}
           onSwitchConversation={switchConversation}
-          onOpenContent={setActiveContent}
+          onOpenContent={(c) => { setActiveContent(c); if (c) setShowPanel(true); }}
           showPanel={showPanel}
           onTogglePanel={() => setShowPanel(!showPanel)}
         />
