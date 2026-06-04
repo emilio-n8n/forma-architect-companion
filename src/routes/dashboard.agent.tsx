@@ -432,23 +432,6 @@ function ChatInner({
                 >
                   <Share2 className="w-4 h-4" />
                 </button>
-                <button
-                  className="hover:text-[#e5e5e5]"
-                  title="Plus d'options"
-                  onClick={() => {
-                    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `FORMA-message-${new Date().toISOString().slice(0, 10)}.md`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  <Ellipsis className="w-4 h-4" />
-                </button>
               </div>
             </div>
           );
