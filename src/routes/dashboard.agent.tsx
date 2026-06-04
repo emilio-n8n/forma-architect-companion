@@ -541,8 +541,8 @@ function ReactMarkdownContent({
   onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
   messageIdx: number;
 }) {
-  const renderers = {
-    strong: ({ children }: { children: React.ReactNode }) => {
+  const renderers: import("react-markdown").Components = {
+    strong: ({ children }) => {
       const t = typeof children === "string" ? children : "";
       if (t.startsWith("[RF:")) {
         return (
@@ -553,7 +553,7 @@ function ReactMarkdownContent({
       }
       return <strong>{children}</strong>;
     },
-    code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode }) => {
+    code: ({ className, children, ...props }) => {
       const isInline = !className;
       const content = String(children || "").replace(/\n$/, "");
       const lang = className?.replace(/^language-/, "") ?? "";
@@ -642,7 +642,7 @@ function ReactMarkdownContent({
         </pre>
       );
     },
-    p: ({ children }: { children: React.ReactNode }) => {
+    p: ({ children }) => {
       return <p className="text-sm leading-relaxed text-[#d4d4d4]">{children}</p>;
     },
   };
