@@ -264,8 +264,7 @@ function ChatInner({
       style={{ backgroundColor: "#090909" }}
     >
       {/* Top bar */}
-      <div className="flex items-center justify-between px-2 py-3 shrink-0">
-        <span className="text-xs text-[#a3a3a3] uppercase tracking-widest font-medium">FORMA</span>
+      <div className="flex items-center justify-end px-2 py-3 shrink-0">
         <div className="flex items-center gap-1">
           <button
             onClick={onTogglePanel}
