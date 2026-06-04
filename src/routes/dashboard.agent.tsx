@@ -146,10 +146,8 @@ function ChatInner({
   const searchWebFn = useServerFn(searchWeb);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ title: string; url: string; text: string }> | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
+  const [forceWebNext, setForceWebNext] = useState(false);
   const [conversations, setConversations] = useState<
     Array<{ id: string; title: string; updated_at: string; message_count: number }>
   >([]);
