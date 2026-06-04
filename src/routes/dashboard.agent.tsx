@@ -11,12 +11,12 @@ import {
   Copy,
   Check,
   RefreshCw,
-  Ellipsis,
-  PenLine,
   Share2,
   Send,
   PanelRightOpen,
   PanelRightClose,
+  Globe,
+  PenLine,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -90,7 +90,7 @@ function AgentPage() {
 
   return (
     <div className="flex w-full gap-4 overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)", padding: "1rem", backgroundColor: "#090909" }}>
-      <div className={showPanel ? "w-[350px] min-w-[300px] shrink-0" : "flex-1 max-w-[600px]"}>
+      <div className={showPanel ? "w-[350px] min-w-[300px] shrink-0" : "flex-1 max-w-[760px] mx-auto"}>
         <ChatInner
           key={convId}
           convId={convId}
@@ -104,7 +104,7 @@ function AgentPage() {
             setConvId(id);
           }}
           onSwitchConversation={switchConversation}
-          onOpenContent={setActiveContent}
+          onOpenContent={(c) => { setActiveContent(c); if (c) setShowPanel(true); }}
           showPanel={showPanel}
           onTogglePanel={() => setShowPanel(!showPanel)}
         />
@@ -146,10 +146,8 @@ function ChatInner({
   const searchWebFn = useServerFn(searchWeb);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ title: string; url: string; text: string }> | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
+  const [forceWebNext, setForceWebNext] = useState(false);
   const [conversations, setConversations] = useState<
     Array<{ id: string; title: string; updated_at: string; message_count: number }>
   >([]);
@@ -203,12 +201,14 @@ function ChatInner({
     setInput("");
     setSuggestions(null);
 
-    const needsSearch = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
+    const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
       text,
     );
+    const needsSearch = forceWebNext || auto;
+    setForceWebNext(false);
+
     if (needsSearch) {
       setSearchLoading(true);
-      setSearchResults(null);
       const res = await searchWebFn({ data: { query: text } }).catch(() => ({ results: [] }));
       setSearchLoading(false);
       if (res.results && res.results.length > 0) {
@@ -264,8 +264,7 @@ function ChatInner({
       style={{ backgroundColor: "#090909" }}
     >
       {/* Top bar */}
-      <div className="flex items-center justify-between px-2 py-3 shrink-0">
-        <span className="text-xs text-[#a3a3a3] uppercase tracking-widest font-medium">FORMA</span>
+      <div className="flex items-center justify-end px-2 py-3 shrink-0">
         <div className="flex items-center gap-1">
           <button
             onClick={onTogglePanel}
@@ -433,23 +432,6 @@ function ChatInner({
                 >
                   <Share2 className="w-4 h-4" />
                 </button>
-                <button
-                  className="hover:text-[#e5e5e5]"
-                  title="Plus d'options"
-                  onClick={() => {
-                    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `FORMA-message-${new Date().toISOString().slice(0, 10)}.md`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  <Ellipsis className="w-4 h-4" />
-                </button>
               </div>
             </div>
           );
@@ -485,103 +467,17 @@ function ChatInner({
         <div ref={endRef} />
       </div>
 
-      {/* Search bar (expandable) */}
-      {showSearch && (
-        <div className="px-2 pb-2">
-          <div className="flex gap-2 bg-[#1a1a1a] border border-[#333] rounded-2xl p-2">
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === "Enter" && searchQuery.trim() && !searchLoading) {
-                  setSearchLoading(true);
-                  setSearchResults(null);
-                  const res = await searchWebFn({ data: { query: searchQuery.trim() } }).catch(() => ({
-                    results: [],
-                  }));
-                  setSearchResults((res.results ?? []) as Array<{ title: string; url: string; text: string }>);
-                  setSearchLoading(false);
-                }
-              }}
-              placeholder="Rechercher sur le web…"
-              className="flex-1 bg-transparent border-none text-sm text-[#e5e5e5] placeholder-[#666] focus:outline-none p-1"
-            />
-            <button
-              disabled={searchLoading || !searchQuery.trim()}
-              onClick={async () => {
-                setSearchLoading(true);
-                setSearchResults(null);
-                const res = await searchWebFn({ data: { query: searchQuery.trim() } }).catch(() => ({
-                  results: [],
-                }));
-                setSearchResults((res.results ?? []) as Array<{ title: string; url: string; text: string }>);
-                setSearchLoading(false);
-              }}
-              className="text-[#dcb383] text-xs font-medium px-2 shrink-0 disabled:opacity-40"
-            >
-              {searchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Chercher"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Search results overlay */}
-      {searchResults !== null && !searchLoading && (
-        <div className="px-2 pb-2">
-          <div className="border border-[#333] rounded-2xl overflow-hidden bg-[#171717]">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#333]">
-              <span className="text-xs font-medium text-[#e5e5e5]">
-                {searchResults.length} résultat{searchResults.length > 1 ? "s" : ""}
-              </span>
-              <button onClick={() => setSearchResults(null)} className="text-[#a3a3a3] hover:text-[#e5e5e5] text-xs">
-                Fermer
-              </button>
-            </div>
-            <div className="max-h-[30vh] overflow-y-auto divide-y divide-[#333]">
-              {searchResults.map((r, i) => (
-                <div key={i} className="px-4 py-2.5 hover:bg-[#1a1a1a] transition-colors">
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-medium text-[#dcb383] hover:underline flex items-center gap-1"
-                  >
-                    {r.title}
-                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                    </svg>
-                  </a>
-                  <p className="text-[10px] text-[#a3a3a3] mt-0.5 truncate">{r.url}</p>
-                  <p className="text-xs text-[#a3a3a3]/70 mt-1 line-clamp-2">{r.text}</p>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-2 border-t border-[#333]">
-              <button
-                onClick={() => {
-                  const context = searchResults
-                    .map((r, i) => `${i + 1}. ${r.title} (${r.url})\n   ${r.text.slice(0, 300)}`)
-                    .join("\n\n");
-                  setInput(
-                    `Suite de la conversation avec ces résultats de recherche :\n\n${context}\n\n`,
-                  );
-                  setSearchResults(null);
-                }}
-                className="text-xs text-[#dcb383] w-full text-center hover:text-[#e8c49a]"
-              >
-                Utiliser ces résultats dans la conversation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Input */}
       <form onSubmit={handleSubmit} className="mt-2 px-2 pb-3">
         <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl p-3 flex flex-col gap-2">
-          <input
+          <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              const ta = e.currentTarget;
+              ta.style.height = "auto";
+              ta.style.height = Math.min(ta.scrollHeight, 240) + "px";
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -589,30 +485,34 @@ function ChatInner({
               }
             }}
             placeholder="Écrivons ou créons ensemble"
-            className="bg-transparent border-none text-sm text-[#e5e5e5] placeholder-[#666] focus:outline-none w-full p-0"
+            rows={1}
+            className="bg-transparent border-none text-sm text-[#e5e5e5] placeholder-[#666] focus:outline-none w-full p-0 resize-none leading-relaxed max-h-60 overflow-y-auto"
           />
           <div className="flex justify-between items-center mt-1">
             <div className="flex gap-2">
               <button
                 type="button"
-                className="p-1.5 text-[#a3a3a3] hover:text-[#e5e5e5] rounded-full hover:bg-[#262626] transition-colors"
+                className="flex items-center gap-1.5 bg-[#2a2a2a] border border-[#3f3f3f] text-xs px-2.5 py-1 rounded-full text-[#a3a3a3] hover:text-[#e5e5e5] transition-colors"
                 title="Nouveau document"
                 onClick={() => {
                   onOpenContent({ type: "doc", title: "Nouveau document", content: "# Nouveau document\n\nÉcrivez ici…" });
                 }}
               >
-                <Plus className="w-5 h-5" />
+                <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
+                Canvas
               </button>
               <button
                 type="button"
-                className="flex items-center gap-1.5 bg-[#2a2a2a] border border-[#3f3f3f] text-xs px-2.5 py-1 rounded-full text-[#a3a3a3] hover:text-[#e5e5e5] transition-colors"
-                title="Canvas"
-                onClick={() => {
-                  onOpenContent({ type: "doc", title: "Canvas", content: "# Canvas\n\nEspace de travail libre." });
-                }}
+                onClick={() => setForceWebNext((v) => !v)}
+                className={`flex items-center gap-1.5 border text-xs px-2.5 py-1 rounded-full transition-colors ${
+                  forceWebNext
+                    ? "bg-[#dcb383]/15 border-[#dcb383]/40 text-[#dcb383]"
+                    : "bg-[#2a2a2a] border-[#3f3f3f] text-[#a3a3a3] hover:text-[#e5e5e5]"
+                }`}
+                title="Forcer une recherche web pour le prochain message"
               >
-                <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
-                Canvas
+                <Globe className="w-3.5 h-3.5" />
+                Web
               </button>
             </div>
             <div className="flex items-center gap-2">
@@ -641,8 +541,8 @@ function ReactMarkdownContent({
   onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
   messageIdx: number;
 }) {
-  const renderers = {
-    strong: ({ children }: { children: React.ReactNode }) => {
+  const renderers: import("react-markdown").Components = {
+    strong: ({ children }) => {
       const t = typeof children === "string" ? children : "";
       if (t.startsWith("[RF:")) {
         return (
@@ -653,7 +553,7 @@ function ReactMarkdownContent({
       }
       return <strong>{children}</strong>;
     },
-    code: ({ className, children, ...props }: { className?: string; children?: React.ReactNode }) => {
+    code: ({ className, children, ...props }) => {
       const isInline = !className;
       const content = String(children || "").replace(/\n$/, "");
       const lang = className?.replace(/^language-/, "") ?? "";
@@ -742,7 +642,7 @@ function ReactMarkdownContent({
         </pre>
       );
     },
-    p: ({ children }: { children: React.ReactNode }) => {
+    p: ({ children }) => {
       return <p className="text-sm leading-relaxed text-[#d4d4d4]">{children}</p>;
     },
   };
