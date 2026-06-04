@@ -201,12 +201,14 @@ function ChatInner({
     setInput("");
     setSuggestions(null);
 
-    const needsSearch = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
+    const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
       text,
     );
+    const needsSearch = forceWebNext || auto;
+    setForceWebNext(false);
+
     if (needsSearch) {
       setSearchLoading(true);
-      setSearchResults(null);
       const res = await searchWebFn({ data: { query: text } }).catch(() => ({ results: [] }));
       setSearchLoading(false);
       if (res.results && res.results.length > 0) {
