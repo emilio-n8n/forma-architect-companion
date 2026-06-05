@@ -205,8 +205,24 @@ async function callJSON<T>(prompt: string, system: string): Promise<T> {
 export const generatePlans = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => {
-    try { return GenerateInput.parse(d); } catch {
+    // Format questionnaire (parcel, plu, program, style)
+    if (d && typeof d === 'object' && 'parcel' in d) {
+      const result = GenerateInput.safeParse(d);
+      if (!result.success) {
+        const details = result.error.issues.map(i =>
+          `${i.path.join('.')}: ${i.message}`
+        ).join('; ');
+        throw new Error(`Données questionnaire invalides: ${details}`);
+      }
+      return result.data;
+    }
+    // Format legacy (surface, bedrooms, levels, budget)
+    try {
       return LegacyInput.parse(d) as unknown as MiniArchiInput;
+    } catch (e) {
+      throw new Error(
+        'Format de données inconnu. Envoyez soit { parcel, plu, program, style } (questionnaire) soit { surface, bedrooms, levels, budget } (legacy).'
+      );
     }
   })
   .handler(async ({ data, context }) => {
