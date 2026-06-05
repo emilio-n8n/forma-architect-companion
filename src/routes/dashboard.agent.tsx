@@ -187,12 +187,40 @@ function ChatInner({
     },
   });
   const [input, setInput] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const loading = status === "submitted" || status === "streaming";
+  const lastMessageId = messages[messages.length - 1]?.id;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distance < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lastMessageId, status]);
+
+  useEffect(() => {
+    if (status !== "streaming") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const tick = () => {
+      if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +228,7 @@ function ChatInner({
     const text = input;
     setInput("");
     setSuggestions(null);
+    stickToBottomRef.current = true;
 
     const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
       text,
@@ -209,15 +238,36 @@ function ChatInner({
 
     if (needsSearch) {
       setSearchLoading(true);
-      const res = await searchWebFn({ data: { query: text } }).catch(() => ({ results: [] }));
+      const history = messages
+        .slice(-6)
+        .map((m) => ({
+          role: m.role,
+          content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim(),
+        }))
+        .filter((m) => m.content.length > 0);
+      const res = (await searchWebFn({ data: { query: text, history } }).catch(() => ({
+        results: [],
+        answer: "",
+      }))) as { results?: Array<{ title: string; url: string; text: string }>; answer?: string };
       setSearchLoading(false);
-      if (res.results && res.results.length > 0) {
-        const context = (res.results as Array<{ title: string; url: string; text: string }>)
+      const results = res.results ?? [];
+      const answer = res.answer ?? "";
+      if (answer || results.length > 0) {
+        const sources = results
           .slice(0, 5)
-          .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.text.slice(0, 500)}`)
+          .map((r, i) => `[${i + 1}] ${r.title} — ${r.url}\n${r.text.slice(0, 400)}`)
           .join("\n\n");
-        const augmented = `${text}\n\nRésultats de recherche :\n${context}`;
-        onSave("user", augmented);
+        const augmented = [
+          text,
+          "",
+          "---",
+          "Contexte web (cite les sources [1], [2], … dans ta réponse) :",
+          answer ? `Réponse synthétisée Exa : ${answer}` : "",
+          sources ? `Sources :\n${sources}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        onSave("user", text);
         await sendMessage({ text: augmented });
         return;
       }
@@ -366,7 +416,7 @@ function ChatInner({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4 min-h-0">
+      <div ref={scrollRef} className="chat-scroll flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4 min-h-0" style={{ overflowAnchor: "none" }}>
         {messages.length === 0 && (
           <div className="text-center text-[#a3a3a3] py-16">
             <FileText className="w-10 h-10 mx-auto opacity-30 mb-4" />
@@ -464,8 +514,8 @@ function ChatInner({
             <Loader2 className="h-4 w-4 animate-spin text-[#dcb383]" /> L'agent réfléchit…
           </div>
         )}
-        <div ref={endRef} />
       </div>
+
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="mt-2 px-2 pb-3">
@@ -642,13 +692,36 @@ function ReactMarkdownContent({
         </pre>
       );
     },
-    p: ({ children }) => {
-      return <p className="text-sm leading-relaxed text-[#d4d4d4]">{children}</p>;
-    },
+    p: ({ children }) => <p className="my-2 leading-relaxed text-[#d4d4d4]">{children}</p>,
+    h1: ({ children }) => <h1 className="text-xl font-semibold text-[#f5f5f5] mt-6 mb-3 leading-tight">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-lg font-semibold text-[#f0f0f0] mt-5 mb-2 leading-tight">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-[15px] font-semibold text-[#e8e8e8] mt-4 mb-1.5">{children}</h3>,
+    h4: ({ children }) => <h4 className="text-sm font-semibold text-[#e5e5e5] mt-3 mb-1">{children}</h4>,
+    ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1 marker:text-[#dcb383]/60">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1 marker:text-[#dcb383]/60">{children}</ol>,
+    li: ({ children }) => <li className="leading-relaxed text-[#d4d4d4]">{children}</li>,
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#dcb383] underline decoration-[#dcb383]/40 underline-offset-2 hover:decoration-[#dcb383] break-words">
+        {children}
+      </a>
+    ),
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-[#dcb383]/40 pl-3 my-3 text-[#bbb] italic">{children}</blockquote>
+    ),
+    hr: () => <hr className="my-4 border-[#2a2a2a]" />,
+    table: ({ children }) => (
+      <div className="my-3 overflow-x-auto rounded-lg border border-[#2a2a2a]">
+        <table className="min-w-full text-sm border-collapse">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-[#1a1a1a] text-[#dcb383]">{children}</thead>,
+    th: ({ children }) => <th className="text-left font-medium px-3 py-2 border-b border-[#2a2a2a]">{children}</th>,
+    td: ({ children }) => <td className="px-3 py-2 border-b border-[#222] text-[#d4d4d4] align-top">{children}</td>,
+    tr: ({ children }) => <tr className="even:bg-[#141414]">{children}</tr>,
   };
 
   return (
-    <div className="max-w-full">
+    <div className="max-w-full text-sm text-[#d4d4d4] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 break-words">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderers}>
         {text}
       </ReactMarkdown>

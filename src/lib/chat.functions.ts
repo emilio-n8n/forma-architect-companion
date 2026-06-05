@@ -214,41 +214,107 @@ export const generateSuggestions = createServerFn({ method: "POST" })
 
 export const searchWeb = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ query: z.string().min(1).max(500) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        query: z.string().min(1).max(500),
+        history: z
+          .array(z.object({ role: z.string(), content: z.string() }))
+          .max(10)
+          .optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ data }) => {
     const exaKey = process.env.EXA_API_KEY;
     if (!exaKey) {
-      return { error: "API Exa non configurée", results: [] };
+      return { error: "API Exa non configurée", answer: "", results: [] };
     }
+
+    // 1. Réécrire la requête en tenant compte du contexte conversationnel
+    let effectiveQuery = data.query;
+    const mistralKey = process.env.MISTRAL_API_KEY;
+    if (mistralKey && data.history && data.history.length > 0) {
+      try {
+        const ctx = data.history
+          .slice(-6)
+          .map((m) => `${m.role === "user" ? "Utilisateur" : "Assistant"}: ${m.content.slice(0, 600)}`)
+          .join("\n");
+        const r = await fetch("https://api.mistral.ai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${mistralKey}` },
+          body: JSON.stringify({
+            model: "mistral-small-latest",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Tu reformules une requête de recherche web en tenant compte du contexte de la conversation. " +
+                  "Le sujet implicite (architecture, IA, BTP, etc.) DOIT être préservé. " +
+                  "Réponds UNIQUEMENT par la requête reformulée, sans guillemets, sans préfixe, en français, max 25 mots.",
+              },
+              {
+                role: "user",
+                content: `Contexte récent :\n${ctx}\n\nDernier message utilisateur : "${data.query}"\n\nRequête de recherche optimisée :`,
+              },
+            ],
+            temperature: 0.2,
+            max_tokens: 80,
+          }),
+        });
+        if (r.ok) {
+          const j = await r.json();
+          const rewritten = (j.choices?.[0]?.message?.content ?? "").trim().replace(/^["']|["']$/g, "");
+          if (rewritten && rewritten.length > 3 && rewritten.length < 300) {
+            effectiveQuery = rewritten;
+          }
+        }
+      } catch (e) {
+        console.error("[search] query rewrite failed", e);
+      }
+    }
+
+    // 2. Exa /answer : LLM-powered, retourne réponse synthétisée + citations
     try {
-      const res = await fetch("https://api.exa.ai/search", {
+      const res = await fetch("https://api.exa.ai/answer", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": exaKey,
-        },
-        body: JSON.stringify({
-          query: data.query,
-          numResults: 8,
-          type: "auto",
-          useAutoprompt: true,
-        }),
+        headers: { "Content-Type": "application/json", "x-api-key": exaKey },
+        body: JSON.stringify({ query: effectiveQuery, text: true }),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "unknown error");
-        console.error("[EXA] API error:", res.status, errText);
-        return { error: `Erreur API Exa: ${res.status}`, results: [] };
+        console.error("[EXA] /answer error:", res.status, errText);
+        // Fallback /search avec contents
+        const sRes = await fetch("https://api.exa.ai/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": exaKey },
+          body: JSON.stringify({
+            query: effectiveQuery,
+            numResults: 6,
+            type: "auto",
+            useAutoprompt: true,
+            contents: { text: { maxCharacters: 1500 } },
+          }),
+        });
+        if (!sRes.ok) return { error: `Erreur Exa ${sRes.status}`, answer: "", results: [], query: effectiveQuery };
+        const sJson = await sRes.json();
+        const results = (sJson.results ?? []).map((r: Record<string, unknown>) => ({
+          title: r.title || "Sans titre",
+          url: r.url || "",
+          text: typeof r.text === "string" ? r.text.slice(0, 1500) : "",
+        }));
+        return { results, answer: "", query: effectiveQuery };
       }
       const json = await res.json();
-      const results = (json.results ?? []).map((r: Record<string, unknown>) => ({
-        title: r.title || "Sans titre",
-        url: r.url || "",
-        text: typeof r.text === "string" ? r.text.slice(0, 2000) : "",
-        score: r.score ?? null,
+      const answer: string = typeof json.answer === "string" ? json.answer : "";
+      const citations = (json.citations ?? []).map((c: Record<string, unknown>) => ({
+        title: c.title || "Sans titre",
+        url: c.url || "",
+        text: typeof c.text === "string" ? c.text.slice(0, 1200) : "",
       }));
-      return { results, total: results.length };
+      return { answer, results: citations, query: effectiveQuery };
     } catch (err) {
       console.error("[EXA] Fetch error:", err);
-      return { error: "Erreur réseau lors de la recherche Exa", results: [] };
+      return { error: "Erreur réseau Exa", answer: "", results: [], query: effectiveQuery };
     }
   });
