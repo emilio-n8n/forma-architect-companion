@@ -20,21 +20,20 @@ function DashboardLayout() {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
 
+  // Re-check onboarding status on every location change (handles post-onboarding redirect)
   useEffect(() => {
     if (loading || !user) return;
 
-    // Auto-create studio + check onboarding
-    const init = async () => {
+    const checkOnboarding = async () => {
       try {
-        // Ensure studio exists
-        const { data: members } = await supabase
+        // Auto-create studio if needed (once per user)
+        const { data: membership } = await supabase
           .from("studio_members")
           .select("studio_id")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (!members) {
-          // Get profile for the studio name
+        if (!membership) {
           const { data: profile } = await supabase
             .from("profiles")
             .select("agency_name, email")
@@ -64,18 +63,16 @@ function DashboardLayout() {
           .eq("id", user.id)
           .single();
 
-        if (profile && !profile.onboarding_completed) {
-          setOnboardingNeeded(true);
-        }
-      } catch (e) {
-        console.error("[Dashboard] Init error:", e);
+        setOnboardingNeeded(profile ? !profile.onboarding_completed : false);
+      } catch {
+        setOnboardingNeeded(false);
       } finally {
         setOnboardingCheckDone(true);
       }
     };
 
-    init();
-  }, [loading, user]);
+    checkOnboarding();
+  }, [loading, user, location.pathname]);
 
   // Redirect to onboarding if needed and not already there
   useEffect(() => {

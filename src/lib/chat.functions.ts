@@ -5,8 +5,14 @@ import { sanitizeHtml } from "./sanitize";
 
 export const ensureConversation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) =>
+    z.object({
+      project_id: z.string().uuid().nullable().optional(),
+    }).optional().parse(d),
+  )
+  .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    const projectId = (data as { project_id?: string | null } | undefined)?.project_id ?? null;
     const { data: existing } = await supabase
       .from("conversations")
       .select("id")
@@ -16,7 +22,7 @@ export const ensureConversation = createServerFn({ method: "POST" })
     if (existing) return { id: existing.id };
     const { data, error } = await supabase
       .from("conversations")
-      .insert({ user_id: userId })
+      .insert({ user_id: userId, project_id: projectId })
       .select("id")
       .single();
     if (error) throw new Error(error.message);

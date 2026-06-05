@@ -30,6 +30,7 @@ import {
   deleteConversation,
   searchWeb,
 } from "@/lib/chat.functions";
+import { saveMemoriesFromConversation } from "@/lib/memory.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -145,6 +146,7 @@ function ChatInner({
   const listFn = useServerFn(listConversations);
   const deleteFn = useServerFn(deleteConversation);
   const searchWebFn = useServerFn(searchWeb);
+  const saveMemFn = useServerFn(saveMemoriesFromConversation);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -193,10 +195,7 @@ function ChatInner({
           .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
           .join("\n\n");
 
-        // Fire-and-forget: let the agent extract and save important facts
-        import("@/lib/memory.functions").then((mod) =>
-          mod.saveMemoriesFromConversation({ data: { content: exchangeText } })
-        ).catch(() => {});
+        saveMemFn({ data: { content: exchangeText } }).catch(() => {});
 
         // Generate suggestions
         suggestFn({ data: { messages: recent.slice(-4) } })
