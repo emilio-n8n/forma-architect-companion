@@ -18,6 +18,9 @@ import { Route as DashboardRenderRouteImport } from './routes/dashboard.render'
 import { Route as DashboardProjetsRouteImport } from './routes/dashboard.projets'
 import { Route as DashboardMiniArchiRouteImport } from './routes/dashboard.mini-archi'
 import { Route as DashboardAgentRouteImport } from './routes/dashboard.agent'
+import { Route as DashboardOnboardingRouteImport } from './routes/dashboard.onboarding'
+import { Route as DashboardStudioRouteImport } from './routes/dashboard.studio'
+import { Route as DashboardMemoriesRouteImport } from './routes/dashboard.memories'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -65,6 +68,21 @@ const DashboardAgentRoute = DashboardAgentRouteImport.update({
   path: '/agent',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardOnboardingRoute = DashboardOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardStudioRoute = DashboardStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardMemoriesRoute = DashboardMemoriesRouteImport.update({
+  id: '/memories',
+  path: '/memories',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -82,6 +100,9 @@ export interface FileRoutesByFullPath {
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
+  '/dashboard/studio': typeof DashboardStudioRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -93,6 +114,9 @@ export interface FileRoutesByTo {
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
+  '/dashboard/studio': typeof DashboardStudioRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -106,6 +130,9 @@ export interface FileRoutesById {
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
+  '/dashboard/studio': typeof DashboardStudioRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,6 +147,9 @@ export interface FileRouteTypes {
     | '/dashboard/render'
     | '/dashboard/settings'
     | '/dashboard/'
+    | '/dashboard/onboarding'
+    | '/dashboard/studio'
+    | '/dashboard/memories'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -131,6 +161,9 @@ export interface FileRouteTypes {
     | '/dashboard/render'
     | '/dashboard/settings'
     | '/dashboard'
+    | '/dashboard/onboarding'
+    | '/dashboard/studio'
+    | '/dashboard/memories'
   id:
     | '__root__'
     | '/'
@@ -143,6 +176,9 @@ export interface FileRouteTypes {
     | '/dashboard/render'
     | '/dashboard/settings'
     | '/dashboard/'
+    | '/dashboard/onboarding'
+    | '/dashboard/studio'
+    | '/dashboard/memories'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -224,6 +260,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/onboarding': {
+      id: '/dashboard/onboarding'
+      path: '/onboarding'
+      fullPath: '/dashboard/onboarding'
+      preLoaderRoute: typeof DashboardOnboardingRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/studio': {
+      id: '/dashboard/studio'
+      path: '/studio'
+      fullPath: '/dashboard/studio'
+      preLoaderRoute: typeof DashboardStudioRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/memories': {
+      id: '/dashboard/memories'
+      path: '/memories'
+      fullPath: '/dashboard/memories'
+      preLoaderRoute: typeof DashboardMemoriesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
@@ -234,6 +291,9 @@ interface DashboardRouteChildren {
   DashboardRenderRoute: typeof DashboardRenderRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardOnboardingRoute: typeof DashboardOnboardingRoute
+  DashboardStudioRoute: typeof DashboardStudioRoute
+  DashboardMemoriesRoute: typeof DashboardMemoriesRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
@@ -243,6 +303,9 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardRenderRoute: DashboardRenderRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
+  DashboardOnboardingRoute: DashboardOnboardingRoute,
+  DashboardStudioRoute: DashboardStudioRoute,
+  DashboardMemoriesRoute: DashboardMemoriesRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(

@@ -1,0 +1,292 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { CreateMemorySchema, type Memory } from "./memory.types";
+
+export const createMemory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => CreateMemorySchema.extend({ project_id: z.string().uuid().nullable().optional() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    // Get user's studio
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("studio_id")
+      .eq("id", userId)
+      .single();
+
+    const { error } = await supabase.from("memories").insert({
+      user_id: userId,
+      studio_id: profile?.studio_id ?? null,
+      project_id: data.project_id ?? null,
+      level: data.level,
+      content: data.content,
+    });
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
+
+export const searchMemories = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      query: z.string().min(1).max(2000),
+      project_id: z.string().uuid().nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    // Get user's studio for studio-level memory access
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("studio_id")
+      .eq("id", userId)
+      .single();
+
+    const query = data.query.trim();
+    if (!query) return [];
+
+    // Simple keyword search — split query into meaningful keywords
+    const keywords = query
+      .toLowerCase()
+      .replace(/[?.,!;:()]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+      .slice(0, 8);
+
+    if (keywords.length === 0) return [];
+
+    // Build ILIKE conditions
+    const conditions = keywords.map((kw) => `content.ilike.%${kw}%`);
+
+    // Search personal memories
+    let personalMemories: any[] = [];
+    if (conditions.length > 0) {
+      const { data: personal } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("user_id", userId)
+        .in("level", ["personal", "project"])
+        .or(conditions.join(","))
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      personalMemories = personal ?? [];
+    }
+
+    // Search studio memories if user has a studio
+    let studioMemories: any[] = [];
+    if (profile?.studio_id && conditions.length > 0) {
+      const { data: studio } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("level", "studio")
+        .eq("studio_id", profile.studio_id)
+        .or(conditions.join(","))
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      studioMemories = studio ?? [];
+    }
+
+    // Merge, keep unique by id, and return
+    const seen = new Set<string>();
+    const combined = [...personalMemories, ...studioMemories].filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    }).slice(0, 15);
+
+    return combined as Memory[];
+  });
+
+export const listMemories = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      level: z.enum(["project", "personal", "studio"]).optional(),
+      project_id: z.string().uuid().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("studio_id")
+      .eq("id", userId)
+      .single();
+
+    let query = supabase.from("memories").select("*");
+
+    if (data.level === "studio" && profile?.studio_id) {
+      query = query.eq("level", "studio").eq("studio_id", profile.studio_id);
+    } else if (data.level === "project" && data.project_id) {
+      query = query.eq("level", "project").eq("project_id", data.project_id);
+    } else if (data.level === "personal") {
+      query = query.eq("level", "personal").eq("user_id", userId);
+    } else {
+      // All accessible
+      query = query.eq("user_id", userId);
+      if (profile?.studio_id) {
+        // Also include studio memories — handled below
+      }
+    }
+
+    const { data: personal, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) throw new Error(error.message);
+
+    let result = personal ?? [];
+
+    // Include studio memories if no specific level filter
+    if (!data.level && profile?.studio_id) {
+      const { data: studio } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("level", "studio")
+        .eq("studio_id", profile.studio_id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (studio) {
+        const seen = new Set(result.map((m: any) => m.id));
+        result = [...result, ...studio.filter((m: any) => !seen.has(m.id))];
+      }
+    }
+
+    return result as Memory[];
+  });
+
+export const deleteMemory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ memoryId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { error } = await supabase
+      .from("memories")
+      .delete()
+      .eq("id", data.memoryId)
+      .eq("user_id", userId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
+
+/**
+ * Extract and save memories from conversation content.
+ * Called after each assistant response.
+ */
+export const saveMemoriesFromConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      content: z.string().min(1).max(50000),
+      project_id: z.string().uuid().nullable().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("studio_id")
+      .eq("id", userId)
+      .single();
+
+    // We use Mistral to extract important facts to remember
+    const { mistral } = await import("./ai-gateway");
+    const model = mistral("mistral-small-latest");
+
+    const systemPrompt = `Tu es un assistant qui extrait des informations importantes à retenir d'une conversation.
+
+Analyse le message ci-dessous et identifie les faits IMPORTANTS qui méritent d'être mémorisés pour les conversations futures.
+Ne mémorise que :
+- Les préférences personnelles de l'utilisateur (ex: "toujours utiliser 'Bien cordialement'")
+- Les informations clés sur un projet (ex: "cette maison est en bord de mer")
+- Les contraintes architecturales (ex: "le PLU impose une hauteur max de 9m")
+- Les habitudes de travail (ex: "l'architecte préfère les toits plats")
+
+NE mémorise PAS :
+- Les questions triviales
+- Les salutations
+- Les informations temporaires
+
+Répond UNIQUEMENT avec un tableau JSON, jamais autre chose :
+[
+  {
+    "content": "le fait à retenir (1 phrase précise)",
+    "level": "project" | "personal" | "studio"
+  }
+]
+
+- "project" : info spécifique à ce projet (nécessite un project_id)
+- "personal" : préférence personnelle de l'utilisateur
+- "studio" : règle/standard applicable à toute l'agence
+
+Si rien à mémoriser, réponds []`;
+
+    const result = await model.generateText({
+      system: systemPrompt,
+      messages: [{ role: "user", content: data.content }],
+    });
+
+    try {
+      // Try to parse as JSON
+      const text = result.text.trim();
+      // Find JSON array in the response
+      const jsonStart = text.indexOf("[");
+      const jsonEnd = text.lastIndexOf("]");
+      if (jsonStart === -1 || jsonEnd === -1) return { saved: 0 };
+
+      const jsonStr = text.slice(jsonStart, jsonEnd + 1);
+      const memories: Array<{ content: string; level: string }> = JSON.parse(jsonStr);
+
+      if (!Array.isArray(memories) || memories.length === 0) return { saved: 0 };
+
+      let saved = 0;
+      for (const mem of memories) {
+        if (!mem.content || !["project", "personal", "studio"].includes(mem.level)) continue;
+
+        // For project-level, require project_id
+        const projectId = mem.level === "project" ? (data.project_id ?? null) : null;
+
+        // Skip project memories without a project context
+        if (mem.level === "project" && !projectId) continue;
+
+        // Skip studio memories without a studio
+        if (mem.level === "studio" && !profile?.studio_id) continue;
+
+        // Check for near-duplicate by content similarity (simple length + overlap)
+        const { data: existing } = await supabase
+          .from("memories")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("level", mem.level)
+          .ilike("content", `%${mem.content.slice(0, 40)}%`)
+          .maybeSingle();
+
+        if (existing) continue;
+
+        const { error } = await supabase.from("memories").insert({
+          user_id: userId,
+          studio_id: mem.level === "studio" ? profile!.studio_id : null,
+          project_id: projectId,
+          level: mem.level,
+          content: mem.content,
+        });
+
+        if (!error) saved++;
+      }
+
+      return { saved };
+    } catch {
+      // Parsing failed, silently ignore
+      return { saved: 0 };
+    }
+  });

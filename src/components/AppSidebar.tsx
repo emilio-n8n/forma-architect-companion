@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Sparkles, MessageSquare, LayoutGrid, FolderKanban, Settings, LogOut, Layers,
+  Users, BrainCircuit,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -56,6 +57,24 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={path.startsWith("/dashboard/studio")}
+                  className="hover:bg-primary/15 hover:text-primary">
+                  <Link to="/dashboard/studio" className="flex items-center gap-3">
+                    <Users className="h-4 w-4" />
+                    {!collapsed && <span>Équipe</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={path.startsWith("/dashboard/memories")}
+                  className="hover:bg-primary/15 hover:text-primary">
+                  <Link to="/dashboard/memories" className="flex items-center gap-3">
+                    <BrainCircuit className="h-4 w-4" />
+                    {!collapsed && <span>Mémoires</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

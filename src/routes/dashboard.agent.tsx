@@ -18,6 +18,7 @@ import {
   Globe,
   PenLine,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import {
   ensureConversation,
@@ -165,7 +166,14 @@ function ChatInner({
   const { messages, sendMessage, status } = useChat({
     id: convId,
     messages: initialMessages,
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      headers: async () => {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        return token ? { Authorization: `Bearer ${token}` } : {};
+      },
+    }),
     onFinish: ({ message }) => {
       const text = message.parts
         .map((p) => (p.type === "text" ? p.text : ""))
@@ -174,13 +182,24 @@ function ChatInner({
       if (text) onSave("assistant", text);
 
       if (text && messages.length >= 2) {
+        // Save memories from this exchange
         const recent = [...messages, message]
-          .slice(-4)
+          .slice(-2)
           .map((m) => {
             const t = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim();
             return { role: m.role, content: t };
           });
-        suggestFn({ data: { messages: recent } })
+        const exchangeText = recent
+          .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+          .join("\n\n");
+
+        // Fire-and-forget: let the agent extract and save important facts
+        import("@/lib/memory.functions").then((mod) =>
+          mod.saveMemoriesFromConversation({ data: { content: exchangeText } })
+        ).catch(() => {});
+
+        // Generate suggestions
+        suggestFn({ data: { messages: recent.slice(-4) } })
           .then((s) => setSuggestions(s))
           .catch(() => {});
       }
