@@ -187,12 +187,40 @@ function ChatInner({
     },
   });
   const [input, setInput] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const loading = status === "submitted" || status === "streaming";
+  const lastMessageId = messages[messages.length - 1]?.id;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottomRef.current = distance < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lastMessageId, status]);
+
+  useEffect(() => {
+    if (status !== "streaming") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const tick = () => {
+      if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +228,7 @@ function ChatInner({
     const text = input;
     setInput("");
     setSuggestions(null);
+    stickToBottomRef.current = true;
 
     const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
       text,
@@ -209,15 +238,36 @@ function ChatInner({
 
     if (needsSearch) {
       setSearchLoading(true);
-      const res = await searchWebFn({ data: { query: text } }).catch(() => ({ results: [] }));
+      const history = messages
+        .slice(-6)
+        .map((m) => ({
+          role: m.role,
+          content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim(),
+        }))
+        .filter((m) => m.content.length > 0);
+      const res = (await searchWebFn({ data: { query: text, history } }).catch(() => ({
+        results: [],
+        answer: "",
+      }))) as { results?: Array<{ title: string; url: string; text: string }>; answer?: string };
       setSearchLoading(false);
-      if (res.results && res.results.length > 0) {
-        const context = (res.results as Array<{ title: string; url: string; text: string }>)
+      const results = res.results ?? [];
+      const answer = res.answer ?? "";
+      if (answer || results.length > 0) {
+        const sources = results
           .slice(0, 5)
-          .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.text.slice(0, 500)}`)
+          .map((r, i) => `[${i + 1}] ${r.title} — ${r.url}\n${r.text.slice(0, 400)}`)
           .join("\n\n");
-        const augmented = `${text}\n\nRésultats de recherche :\n${context}`;
-        onSave("user", augmented);
+        const augmented = [
+          text,
+          "",
+          "---",
+          "Contexte web (cite les sources [1], [2], … dans ta réponse) :",
+          answer ? `Réponse synthétisée Exa : ${answer}` : "",
+          sources ? `Sources :\n${sources}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        onSave("user", text);
         await sendMessage({ text: augmented });
         return;
       }
