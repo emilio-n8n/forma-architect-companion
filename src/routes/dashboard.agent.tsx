@@ -514,8 +514,8 @@ function ChatInner({
             <Loader2 className="h-4 w-4 animate-spin text-[#dcb383]" /> L'agent réfléchit…
           </div>
         )}
-        <div ref={endRef} />
       </div>
+
 
       {/* Input */}
       <form onSubmit={handleSubmit} className="mt-2 px-2 pb-3">
