@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { checkRateLimit, getRateLimitHeaders } from "./rate-limiter";
+import { MiniArchiInputSchema, type MiniArchiInput } from "./mini-archi.types";
 
 // ⭐ SECURITY: Schémas Zod complets pour validation des données
 
@@ -92,10 +93,13 @@ const PlanVariantSchema = z.object({
   plan_3d_ready: z.boolean().optional(),
 });
 
-// ⭐ FIX: Validation plus stricte des inputs (bug #13)
-const Input = z.object({
+// ⭐ Schema for the full questionnaire input (Phase 1)
+const GenerateInput = MiniArchiInputSchema;
+
+// Legacy Input kept for backward compat with existing client code
+const LegacyInput = z.object({
   surface: z.number().int().min(20).max(2000),
-  bedrooms: z.number().int().min(1).max(20), // ⭐ min(1) au lieu de min(0)
+  bedrooms: z.number().int().min(1).max(20),
   levels: z.number().int().min(1).max(6),
   budget: z.enum(["Économique", "Moyen de gamme", "Haut de gamme"]),
 });
@@ -200,45 +204,131 @@ async function callJSON<T>(prompt: string, system: string): Promise<T> {
 
 export const generatePlans = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => Input.parse(d))
+  .inputValidator((d: unknown) => {
+    try { return GenerateInput.parse(d); } catch {
+      return LegacyInput.parse(d) as unknown as MiniArchiInput;
+    }
+  })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    
-    // ⭐ SECURITY: Rate Limiting - 5 requests/minute/user for generation
+
     if (!checkRateLimit('GENERATION', userId)) {
       throw new Error('Limite de requêtes atteinte. Veuillez patienter avant de générer de nouveaux plans.');
     }
-    const prompt = `Génère 6 variantes de plans pour une maison/projet :
-- Surface: ${data.surface} m²
-- Chambres: ${data.bedrooms}
-- Niveaux: ${data.levels}
-- Budget cible: ${data.budget}
 
-Conformes à RE2020 et accessibilité PMR. Styles variés (contemporain, traditionnel, minimaliste, bioclimatique, industriel, méditerranéen).
+    // Detect legacy vs full input
+    const isLegacy = !("parcel" in data && "program" in data && "plu" in data);
+    const programRooms = isLegacy ? [] : (data as MiniArchiInput).program.rooms;
+    const plu = isLegacy ? null : (data as MiniArchiInput).plu;
+    const parcel = isLegacy ? null : (data as MiniArchiInput).parcel;
+    const style = isLegacy ? null : (data as MiniArchiInput).style;
 
-Format JSON strict:
+    // Compute values for backward compat
+    const totalSurface = isLegacy
+      ? (data as any).surface
+      : programRooms.reduce((sum, r) => sum + r.min_surface, 0);
+    const totalBedrooms = isLegacy
+      ? (data as any).bedrooms
+      : programRooms.filter((r) => r.name.toLowerCase().startsWith("chambre")).length;
+    const maxLevel = isLegacy
+      ? (data as any).levels
+      : Math.max(1, ...programRooms.map((r) => r.floor ?? 1));
+    const budgetValue = isLegacy
+      ? (data as any).budget
+      : style?.budget ?? "Moyen de gamme";
+
+    let parcelleBlock = "";
+    if (parcel) {
+      parcelleBlock = `
+DONNÉES PARCELLE :
+- Adresse : ${parcel.address}
+- Surface terrain : ${parcel.surface} m²
+- Référence cadastrale : ${parcel.cadastral_ref ?? "N/A"}`;
+    }
+
+    let pluBlock = "";
+    if (plu) {
+      pluBlock = `
+CONTRAINTES PLU/URBANISME :
+- Hauteur max : ${plu.max_height}m
+- Recul limite voisine : ${plu.setback_neighbor}m
+- Recul limite rue : ${plu.setback_street}m
+- Emprise au sol max : ${plu.max_ground_coverage}%
+- Niveaux max : ${plu.max_floors}
+${plu.max_shon ? `- SHON max : ${plu.max_shon} m²` : ""}
+${plu.roof_type ? `- Type de toit imposé : ${plu.roof_type}` : ""}
+${plu.materials ? `- Matériaux imposés : ${plu.materials}` : ""}
+${plu.zone ? `- Zone PLU : ${plu.zone}` : ""}
+${plu.notes ? `- Autres contraintes : ${plu.notes}` : ""}`;
+    }
+
+    let programBlock = "";
+    if (programRooms.length > 0) {
+      const floorGroups = new Map<number, typeof programRooms>();
+      programRooms.forEach((r) => {
+        const f = r.floor ?? 1;
+        if (!floorGroups.has(f)) floorGroups.set(f, []);
+        floorGroups.get(f)!.push(r);
+      });
+      programBlock = "\nPROGRAMME PIÈCES :";
+      for (const [floor, rooms] of floorGroups) {
+        programBlock += `\n${floor === 1 ? "RDC" : `Niveau ${floor}`} :`;
+        for (const r of rooms) {
+          const adj = r.adjacent_to.length > 0 ? ` (adjacent à : ${r.adjacent_to.join(", ")})` : "";
+          programBlock += `\n  - ${r.name} : ${r.min_surface}m² min${adj}`;
+        }
+      }
+    }
+
+    let freeBlock = "";
+    if (style?.free_notes) {
+      freeBlock = `\n\nCONTRAINTES LIBRES DE L'ARCHITECTE :\n${style.free_notes}`;
+    }
+
+    let styleBlock = "";
+    if (style) {
+      styleBlock = `\n- Style architectural : ${style.style}
+- Budget cible : ${style.budget}
+- Orientation préférée du séjour : ${style.preferred_orientation}`;
+    }
+
+    const prompt = `Génère 6 variantes de plans pour une maison/projet sur une parcelle spécifique.${parcelleBlock}${pluBlock}${programBlock}
+
+CONFORMITÉ OBLIGATOIRE :
+- RE2020 : isolation renforcée, ventilation naturelle, orientation sud pour pièces de vie
+- Accessibilité PMR : portes ≥ 0.9m, espaces de rotation Ø 1.50m, circulation ≥ 1.20m${styleBlock}
+
+Surface totale estimée : ${totalSurface} m²
+Nombre de chambres : ${totalBedrooms}
+${freeBlock}
+
+IMPORTANT : Les 6 variantes doivent RESPECTER toutes les contraintes PLU ci-dessus (hauteur, reculs, emprise au sol). La surface de plancher de chaque variante ne doit pas dépasser la SHON si spécifiée.
+
+Styles variés (contemporain, traditionnel, minimaliste, bioclimatique, industriel, méditerranéen).
+
+Format JSON strict :
 {"variants":[{"name":"string","concept":"string court","features":["string"],"estimated_cost_eur":number,"energy_class":"A|B|C","pros":["string"]}]}
 
 Exactement 6 variantes.`;
 
     const out = await callJSON<{ variants: PlanVariant[] }>(
       prompt,
-      "Tu es un architecte français senior. Réponds UNIQUEMENT en JSON valide. Prix marché France 2026."
+      "Tu es un architecte français senior spécialisé en maisons individuelles. Tu respectes scrupuleusement les contraintes PLU et normes RE2020/PMR. Réponds UNIQUEMENT en JSON valide. Prix marché France 2026."
     );
     const variants = (out.variants ?? []).slice(0, 6);
-    
-    // ⭐ SECURITY: Valider tous les variants avec Zod avant insertion (SQL Injection prevention)
+
     const validatedVariants = variants.map((v) => PlanVariantSchema.parse(v));
 
     const { data: row, error } = await supabase
       .from("plans")
       .insert({
         user_id: userId,
-        surface: data.surface,
-        bedrooms: data.bedrooms,
-        levels: data.levels,
-        budget: data.budget,
+        surface: totalSurface,
+        bedrooms: totalBedrooms,
+        levels: maxLevel,
+        budget: budgetValue,
         variants: validatedVariants,
+        input_data: isLegacy ? null : data,
       })
       .select()
       .single();
