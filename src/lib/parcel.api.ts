@@ -4,6 +4,22 @@ type AddressResult = {
   lng: number;
 };
 
+function computeGeoArea(coords: number[][][]): number {
+  const ring = coords[0];
+  let area = 0;
+  const R = 6371000;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [lng1, lat1] = ring[i];
+    const [lng2, lat2] = ring[i + 1];
+    const lat1Rad = (lat1 * Math.PI) / 180;
+    const lat2Rad = (lat2 * Math.PI) / 180;
+    const lng1Rad = (lng1 * Math.PI) / 180;
+    const lng2Rad = (lng2 * Math.PI) / 180;
+    area += (lng2Rad - lng1Rad) * (2 + Math.sin(lat1Rad) + Math.sin(lat2Rad));
+  }
+  return Math.round(Math.abs((area * R * R) / 2));
+}
+
 export async function searchAddress(query: string): Promise<AddressResult[]> {
   const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(query)}&limit=5`);
   if (!res.ok) return [];
@@ -31,9 +47,12 @@ export async function fetchCadastreParcel(lat: number, lng: number): Promise<Cad
     const features = data.features ?? [];
     if (features.length === 0) return null;
     const f = features[0];
+    const surf = f.properties?.surface_parcelle
+      ? Number(f.properties.surface_parcelle)
+      : computeGeoArea(f.geometry.coordinates);
     return {
       geojson: f,
-      surface: f.properties?.surface_parcelle ?? 0,
+      surface: surf,
       id: f.properties?.id ?? "",
     };
   } catch {
@@ -74,9 +93,12 @@ export async function searchCadastreByReference(
         }
       }
     } catch { /* ignore */ }
+    const surf = f.properties?.surface_parcelle
+      ? Number(f.properties.surface_parcelle)
+      : computeGeoArea(f.geometry.coordinates);
     return {
       geojson: f,
-      surface: f.properties?.surface_parcelle ?? 0,
+      surface: surf,
       id: f.properties?.id ?? "",
       address,
     };

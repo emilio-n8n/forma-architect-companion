@@ -48,7 +48,7 @@ export function ParcelSelector({
       lat: item.lat,
       lng: item.lng,
       geojson: parcel?.geojson ?? undefined,
-      surface: parcel?.surface ?? 0,
+      surface: parcel?.surface ?? 1,
       cadastral_ref: parcel?.id ?? undefined,
     });
     setLoadingParcel(false);
