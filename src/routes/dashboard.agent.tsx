@@ -416,7 +416,7 @@ function ChatInner({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4 min-h-0">
+      <div ref={scrollRef} className="chat-scroll flex-1 overflow-y-auto px-2 flex flex-col gap-6 pt-2 pb-4 min-h-0" style={{ overflowAnchor: "none" }}>
         {messages.length === 0 && (
           <div className="text-center text-[#a3a3a3] py-16">
             <FileText className="w-10 h-10 mx-auto opacity-30 mb-4" />
