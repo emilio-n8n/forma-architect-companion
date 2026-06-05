@@ -692,13 +692,36 @@ function ReactMarkdownContent({
         </pre>
       );
     },
-    p: ({ children }) => {
-      return <p className="text-sm leading-relaxed text-[#d4d4d4]">{children}</p>;
-    },
+    p: ({ children }) => <p className="my-2 leading-relaxed text-[#d4d4d4]">{children}</p>,
+    h1: ({ children }) => <h1 className="text-xl font-semibold text-[#f5f5f5] mt-6 mb-3 leading-tight">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-lg font-semibold text-[#f0f0f0] mt-5 mb-2 leading-tight">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-[15px] font-semibold text-[#e8e8e8] mt-4 mb-1.5">{children}</h3>,
+    h4: ({ children }) => <h4 className="text-sm font-semibold text-[#e5e5e5] mt-3 mb-1">{children}</h4>,
+    ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1 marker:text-[#dcb383]/60">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1 marker:text-[#dcb383]/60">{children}</ol>,
+    li: ({ children }) => <li className="leading-relaxed text-[#d4d4d4]">{children}</li>,
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#dcb383] underline decoration-[#dcb383]/40 underline-offset-2 hover:decoration-[#dcb383] break-words">
+        {children}
+      </a>
+    ),
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-[#dcb383]/40 pl-3 my-3 text-[#bbb] italic">{children}</blockquote>
+    ),
+    hr: () => <hr className="my-4 border-[#2a2a2a]" />,
+    table: ({ children }) => (
+      <div className="my-3 overflow-x-auto rounded-lg border border-[#2a2a2a]">
+        <table className="min-w-full text-sm border-collapse">{children}</table>
+      </div>
+    ),
+    thead: ({ children }) => <thead className="bg-[#1a1a1a] text-[#dcb383]">{children}</thead>,
+    th: ({ children }) => <th className="text-left font-medium px-3 py-2 border-b border-[#2a2a2a]">{children}</th>,
+    td: ({ children }) => <td className="px-3 py-2 border-b border-[#222] text-[#d4d4d4] align-top">{children}</td>,
+    tr: ({ children }) => <tr className="even:bg-[#141414]">{children}</tr>,
   };
 
   return (
-    <div className="max-w-full">
+    <div className="max-w-full text-sm text-[#d4d4d4] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 break-words">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderers}>
         {text}
       </ReactMarkdown>
