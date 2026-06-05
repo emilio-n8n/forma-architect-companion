@@ -71,7 +71,7 @@ export function ProgramEditor({
             <div className="grid grid-cols-3 gap-2 ml-6">
               <div>
                 <span className="text-[10px] text-muted-foreground">Surface min (m²)</span>
-                <Input type="number" value={room.min_surface} onChange={(e) => updateRoom(i, { min_surface: +e.target.value })}
+                <Input type="number" value={room.min_surface} onChange={(e) => { const v = +e.target.value; updateRoom(i, { min_surface: v > 0 ? v : 1 }); }}
                   className="bg-background h-7 text-xs mt-0.5" min={1} step={0.5} />
               </div>
               <div>

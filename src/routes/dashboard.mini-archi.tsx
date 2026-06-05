@@ -77,10 +77,11 @@ function MiniArchiPage() {
   const plans = useQuery({ queryKey: ["plans"], queryFn: () => list() });
   const mutation = useMutation({
     mutationFn: () => {
+      const safeRooms = rooms.map((r) => ({ ...r, min_surface: r.min_surface > 0 ? r.min_surface : 1 }));
       const input: MiniArchiInput = {
         parcel: parcel!,
         plu,
-        program: { rooms },
+        program: { rooms: safeRooms },
         style,
       };
       return gen({ data: input as unknown as Record<string, unknown> });
