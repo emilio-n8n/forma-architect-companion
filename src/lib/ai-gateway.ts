@@ -12,7 +12,7 @@ export function createLightningProvider(apiKey: string) {
   });
 }
 
-export const LIGHTNING_MODEL = "anthropic/claude-opus-4-8";
+export const LIGHTNING_MODEL = "lightning-ai/gpt-oss-120b";
 
 // Legacy providers kept for any non-migrated call site.
 export function createLovableAiGatewayProvider(apiKey: string) {

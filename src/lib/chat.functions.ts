@@ -193,7 +193,7 @@ export const generateSuggestions = createServerFn({ method: "POST" })
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "anthropic/claude-opus-4-8",
+        model: "lightning-ai/gpt-oss-120b",
         messages: [
           {
             role: "system",
