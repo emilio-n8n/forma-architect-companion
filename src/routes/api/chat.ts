@@ -191,7 +191,7 @@ export const Route = createFileRoute("/api/chat")({
         const result = streamText({
           model: lightning(LIGHTNING_MODEL),
           system: fullSystem,
-          messages: convertToModelMessages(messages as UIMessage[]),
+          messages: await convertToModelMessages(messages as UIMessage[]),
           tools,
           stopWhen: stepCountIs(50),
         });
