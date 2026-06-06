@@ -236,50 +236,6 @@ function ChatInner({
     setInput("");
     setSuggestions(null);
     stickToBottomRef.current = true;
-
-    const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
-      text,
-    );
-    const needsSearch = forceWebNext || auto;
-    setForceWebNext(false);
-
-    if (needsSearch) {
-      setSearchLoading(true);
-      const history = messages
-        .slice(-6)
-        .map((m) => ({
-          role: m.role,
-          content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim(),
-        }))
-        .filter((m) => m.content.length > 0);
-      const res = (await searchWebFn({ data: { query: text, history } }).catch(() => ({
-        results: [],
-        answer: "",
-      }))) as { results?: Array<{ title: string; url: string; text: string }>; answer?: string };
-      setSearchLoading(false);
-      const results = res.results ?? [];
-      const answer = res.answer ?? "";
-      if (answer || results.length > 0) {
-        const sources = results
-          .slice(0, 5)
-          .map((r, i) => `[${i + 1}] ${r.title} — ${r.url}\n${r.text.slice(0, 400)}`)
-          .join("\n\n");
-        const augmented = [
-          text,
-          "",
-          "---",
-          "Contexte web (cite les sources [1], [2], … dans ta réponse) :",
-          answer ? `Réponse synthétisée Exa : ${answer}` : "",
-          sources ? `Sources :\n${sources}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        onSave("user", text);
-        await sendMessage({ text: augmented });
-        return;
-      }
-    }
-
     onSave("user", text);
     await sendMessage({ text });
   };
