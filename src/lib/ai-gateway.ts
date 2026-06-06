@@ -1,17 +1,25 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
+/**
+ * Lightning AI — OpenAI-compatible gateway hosting Claude Opus 4.8.
+ * Used as the primary LLM for chat, tool-calling, and reasoning.
+ */
+export function createLightningProvider(apiKey: string) {
+  return createOpenAICompatible({
+    name: "lightning",
+    baseURL: "https://lightning.ai/api/v1",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+}
+
+export const LIGHTNING_MODEL = "anthropic/claude-opus-4-8";
+
+// Legacy providers kept for any non-migrated call site.
 export function createLovableAiGatewayProvider(apiKey: string) {
   return createOpenAICompatible({
     name: "lovable-ai-gateway",
     baseURL: "https://ai.gateway.lovable.dev/v1",
     headers: { Authorization: `Bearer ${apiKey}` },
-  });
-}
-
-export function createCerebrasProvider() {
-  return createOpenAICompatible({
-    name: "cerebras",
-    baseURL: "https://api.cerebras.ai/v1",
   });
 }
 

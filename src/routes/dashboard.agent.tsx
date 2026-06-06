@@ -15,8 +15,10 @@ import {
   Send,
   PanelRightOpen,
   PanelRightClose,
-  Globe,
   PenLine,
+  Search,
+  Brain,
+  Bookmark,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,9 +30,7 @@ import {
   generateSuggestions,
   listConversations,
   deleteConversation,
-  searchWeb,
 } from "@/lib/chat.functions";
-import { saveMemoriesFromConversation } from "@/lib/memory.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -145,12 +145,8 @@ function ChatInner({
   const suggestFn = useServerFn(generateSuggestions);
   const listFn = useServerFn(listConversations);
   const deleteFn = useServerFn(deleteConversation);
-  const searchWebFn = useServerFn(searchWeb);
-  const saveMemFn = useServerFn(saveMemoriesFromConversation);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [forceWebNext, setForceWebNext] = useState(false);
   const [conversations, setConversations] = useState<
     Array<{ id: string; title: string; updated_at: string; message_count: number }>
   >([]);
@@ -184,21 +180,14 @@ function ChatInner({
       if (text) onSave("assistant", text);
 
       if (text && messages.length >= 2) {
-        // Save memories from this exchange
         const recent = [...messages, message]
-          .slice(-2)
+          .slice(-4)
           .map((m) => {
             const t = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim();
             return { role: m.role, content: t };
-          });
-        const exchangeText = recent
-          .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-          .join("\n\n");
-
-        saveMemFn({ data: { content: exchangeText } }).catch(() => {});
-
-        // Generate suggestions
-        suggestFn({ data: { messages: recent.slice(-4) } })
+          })
+          .filter((m) => m.content.length > 0);
+        suggestFn({ data: { messages: recent } })
           .then((s) => setSuggestions(s))
           .catch(() => {});
       }
@@ -247,50 +236,6 @@ function ChatInner({
     setInput("");
     setSuggestions(null);
     stickToBottomRef.current = true;
-
-    const auto = /cherche|recherche|trouve|actualité|actualités|informe-toi|informations?\s+sur|je\s*veux\s*savoir|va\s*chercher/i.test(
-      text,
-    );
-    const needsSearch = forceWebNext || auto;
-    setForceWebNext(false);
-
-    if (needsSearch) {
-      setSearchLoading(true);
-      const history = messages
-        .slice(-6)
-        .map((m) => ({
-          role: m.role,
-          content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim(),
-        }))
-        .filter((m) => m.content.length > 0);
-      const res = (await searchWebFn({ data: { query: text, history } }).catch(() => ({
-        results: [],
-        answer: "",
-      }))) as { results?: Array<{ title: string; url: string; text: string }>; answer?: string };
-      setSearchLoading(false);
-      const results = res.results ?? [];
-      const answer = res.answer ?? "";
-      if (answer || results.length > 0) {
-        const sources = results
-          .slice(0, 5)
-          .map((r, i) => `[${i + 1}] ${r.title} — ${r.url}\n${r.text.slice(0, 400)}`)
-          .join("\n\n");
-        const augmented = [
-          text,
-          "",
-          "---",
-          "Contexte web (cite les sources [1], [2], … dans ta réponse) :",
-          answer ? `Réponse synthétisée Exa : ${answer}` : "",
-          sources ? `Sources :\n${sources}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        onSave("user", text);
-        await sendMessage({ text: augmented });
-        return;
-      }
-    }
-
     onSave("user", text);
     await sendMessage({ text });
   };
@@ -453,12 +398,14 @@ function ChatInner({
             );
           }
           return (
-            <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed text-[#d4d4d4]">
+            <div key={m.id} className="flex flex-col gap-3 text-sm leading-relaxed text-[#d4d4d4]">
+              <ToolActivity parts={m.parts} />
               <ReactMarkdownContent
                 text={text}
                 onOpenContent={onOpenContent}
                 messageIdx={idx}
               />
+
               <div className="flex gap-3 text-[#a3a3a3] mt-1">
                 <button
                   className="hover:text-[#e5e5e5]"
@@ -505,11 +452,6 @@ function ChatInner({
           );
         })}
 
-        {searchLoading && (
-          <div className="flex items-center gap-2 text-[#a3a3a3] text-sm">
-            <Loader2 className="h-4 w-4 animate-spin text-[#dcb383]" /> Recherche web en cours…
-          </div>
-        )}
 
         {suggestions && status !== "submitted" && status !== "streaming" && (
           <div className="flex flex-wrap gap-2">
@@ -568,19 +510,6 @@ function ChatInner({
               >
                 <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
                 Canvas
-              </button>
-              <button
-                type="button"
-                onClick={() => setForceWebNext((v) => !v)}
-                className={`flex items-center gap-1.5 border text-xs px-2.5 py-1 rounded-full transition-colors ${
-                  forceWebNext
-                    ? "bg-[#dcb383]/15 border-[#dcb383]/40 text-[#dcb383]"
-                    : "bg-[#2a2a2a] border-[#3f3f3f] text-[#a3a3a3] hover:text-[#e5e5e5]"
-                }`}
-                title="Forcer une recherche web pour le prochain message"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                Web
               </button>
             </div>
             <div className="flex items-center gap-2">
@@ -743,6 +672,56 @@ function ReactMarkdownContent({
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderers}>
         {text}
       </ReactMarkdown>
+    </div>
+  );
+}
+
+function ToolActivity({ parts }: { parts: UIMessage["parts"] }) {
+  const toolParts = parts.filter((p: any) => typeof p.type === "string" && p.type.startsWith("tool-"));
+  if (toolParts.length === 0) return null;
+
+  const meta: Record<string, { icon: typeof Search; label: (input: any, output: any) => string; color: string }> = {
+    "tool-web_search": {
+      icon: Search,
+      label: (input, output) => {
+        if (output && Array.isArray(output.results)) return `Web · "${input?.query ?? "…"}" — ${output.results.length} sources`;
+        return `Recherche web · "${input?.query ?? "…"}"`;
+      },
+      color: "text-sky-300 border-sky-500/30 bg-sky-500/10",
+    },
+    "tool-search_memories": {
+      icon: Brain,
+      label: (input, output) => {
+        if (output && Array.isArray(output.memories)) return `Mémoire · ${output.memories.length} résultat${output.memories.length !== 1 ? "s" : ""}`;
+        return `Consulte la mémoire · "${input?.query ?? "…"}"`;
+      },
+      color: "text-violet-300 border-violet-500/30 bg-violet-500/10",
+    },
+    "tool-save_memory": {
+      icon: Bookmark,
+      label: (input, output) => {
+        if (output?.saved) return `Mémorisé [${(input?.level ?? "").toUpperCase()}] : ${(input?.content ?? "").slice(0, 60)}…`;
+        return `Mémorisation…`;
+      },
+      color: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10",
+    },
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {toolParts.map((p: any, i) => {
+        const m = meta[p.type];
+        if (!m) return null;
+        const Icon = m.icon;
+        const running = p.state === "input-streaming" || p.state === "input-available";
+        const label = m.label(p.input, p.output);
+        return (
+          <div key={i} className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border ${m.color}`}>
+            {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" />}
+            <span className="truncate max-w-[320px]">{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

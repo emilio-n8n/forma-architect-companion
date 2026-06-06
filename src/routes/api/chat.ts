@@ -1,262 +1,204 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { streamText, type UIMessage } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage } from "ai";
+import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
+import { createLightningProvider, LIGHTNING_MODEL } from "@/lib/ai-gateway";
 import type { Database } from "@/integrations/supabase/types";
 
-const BASE_PROMPT = `Tu es FORMA Agent, un assistant IA spécialisé en architecture française.
-Tu maîtrises le PLU, la RT/RE2020, le label BBC, les normes d'accessibilité PMR,
-les DTU, les permis de construire, et les pratiques constructives françaises.
-Réponds toujours en français de manière précise, technique et concise.
+const BASE_PROMPT = `Tu es FORMA Agent, assistant IA spécialisé en architecture française.
+Tu maîtrises le PLU, la RE2020, le label BBC, l'accessibilité PMR, les DTU,
+les permis de construire et les pratiques constructives françaises.
+Réponds toujours en français, de manière précise, technique et concise.
 
-Cite systématiquement les articles de loi, normes ou DTU pertinents au format suivant :
-**[RF: Article/Référence]** — Description brève
+Cite systématiquement les références au format **[RF: Article/Référence]** — description brève.
+Exemple : **[RF: DTU 13.3]** Fondations superficielles.
 
-Exemple : **[RF: Article L. 111-1]** Code de l'urbanisme — obligation de permis de construire.
-Exemple : **[RF: DTU 13.3]** Fondations superficielles — disposition constructives.
-Exemple : **[RF: RE2020]** Exigence de performance énergétique — seuil Bbio ≤ Bbiomax.
+## OUTILS À TA DISPOSITION
+Tu disposes de 3 outils. Utilise-les de façon proactive, sans demander la permission :
 
-## Recherche web
-Quand l'utilisateur te demande de chercher des informations récentes (actualités,
-réglementations, PLU, DTU, etc.), des résultats de recherche te seront fournis
-automatiquement dans le message. Commence par "Laissez-moi rechercher sur le web…"
-puis synthétise les résultats naturellement en citant tes sources.
+1. **search_memories(query)** — Consulte la mémoire (préférences perso, contexte projet, règles agence).
+   Utilise-le AVANT chaque réponse non-triviale pour personnaliser.
 
-## Création de documents
-Quand on te demande de rédiger une note, un courrier, un rapport ou tout document structuré,
-encadre-le dans un bloc de code markdown avec le langage \`doc\` :
-\`\`\`doc
-Titre du document
+2. **web_search(query)** — Recherche web en temps réel via Exa.
+   Utilise-le pour toute question d'actualité, réglementation récente, ou info externe.
+   Reformule toi-même la requête : précise le domaine ("architecture", "PLU", "BTP"…)
+   pour éviter les résultats hors-sujet. Cite les sources [1], [2]… dans ta réponse.
 
-Contenu en markdown...
-\`\`\`
+3. **save_memory(content, level, project_id?)** — Mémorise une info importante.
+   - level="project" : spécifique au projet en cours (nécessite project_id)
+   - level="personal" : préférence de l'utilisateur
+   - level="studio"  : règle/standard de l'agence
+   Mémorise les préférences ("toujours signer par X"), contraintes projet, habitudes.
+   N'enregistre PAS les trivialités ni les questions ponctuelles.
 
-## Création de tableaux / tableurs
-Quand on te demande des données chiffrées, des comparaisons, des devis ou tout tableau structuré,
-encadre-les dans un bloc \`spreadsheet\` avec du JSON :
-\`\`\`spreadsheet
-{
-  "title": "Devis comparatif",
-  "columns": [
-    { "key": "poste", "label": "Poste", "type": "string" },
-    { "key": "montant", "label": "Montant (€)", "type": "number" }
-  ],
-  "rows": [
-    { "poste": "Fondations", "montant": 15000 }
-  ]
-}
-\`\`\`
-
-## Rédaction d'emails
-Quand on te demande de rédiger un email professionnel, encadre-le dans un bloc \`email\` avec du JSON :
-\`\`\`email
-{
-  "to": "client@exemple.com",
-  "subject": "Objet de l'email",
-  "body": "Corps du message...",
-  "cc": "architecte@exemple.com"
-}
-\`\`\``;
+## CRÉATION DE CONTENUS RICHES
+Quand on te demande un document, encadre-le dans \`\`\`doc … \`\`\` (markdown).
+Pour un tableau de données : \`\`\`spreadsheet { "title":"…", "columns":[…], "rows":[…] } \`\`\`.
+Pour un email : \`\`\`email { "to":"…", "subject":"…", "body":"…" } \`\`\`.`;
 
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const ip =
-          request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
-        const identifier = ip;
-
-        if (!checkRateLimit("CHAT", identifier)) {
-          return new Response("Too many requests. Please try again later.", {
+        const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+        if (!checkRateLimit("CHAT", ip)) {
+          return new Response("Too many requests.", {
             status: 429,
-            headers: getRateLimitHeaders("CHAT", identifier),
+            headers: getRateLimitHeaders("CHAT", ip),
           });
         }
 
         const { messages } = (await request.json()) as { messages?: UIMessage[] };
-        if (!Array.isArray(messages)) {
-          return new Response("messages required", { status: 400 });
-        }
+        if (!Array.isArray(messages)) return new Response("messages required", { status: 400 });
 
-        const key = process.env.MISTRAL_API_KEY;
-        if (!key) {
-          console.error("[SECURITY] MISTRAL_API_KEY not configured");
+        const lightningKey = process.env.LIGHTNING_API_KEY;
+        if (!lightningKey) {
+          console.error("[chat] LIGHTNING_API_KEY missing");
           return new Response("Server configuration error", { status: 500 });
         }
 
-        // --- User context injection ---
+        // --- Auth + Supabase client per-request ---
+        let userId: string | null = null;
+        let sb: ReturnType<typeof createClient<Database>> | null = null;
+        let studioId: string | null = null;
+        let projectId: string | null = null;
         let userContext = "";
 
         try {
           const authHeader = request.headers.get("authorization");
-          if (authHeader?.startsWith("Bearer ")) {
+          const SUPABASE_URL = process.env.SUPABASE_URL;
+          const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+          if (authHeader?.startsWith("Bearer ") && SUPABASE_URL && SUPABASE_KEY) {
             const token = authHeader.replace("Bearer ", "");
-            const SUPABASE_URL = process.env.SUPABASE_URL;
-            const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+            sb = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
+              global: { headers: { Authorization: `Bearer ${token}` } },
+              auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+            });
+            const { data: claims } = await sb.auth.getClaims(token);
+            userId = (claims?.claims?.sub as string | undefined) ?? null;
 
-            if (SUPABASE_URL && SUPABASE_KEY && token) {
-              const sb = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
-                global: { headers: { Authorization: `Bearer ${token}` } },
-                auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-              });
+            if (userId) {
+              const [profileRes, onboardRes] = await Promise.all([
+                sb.from("profiles").select("studio_id").eq("id", userId).single(),
+                sb.from("onboarding_data").select("data").eq("user_id", userId).maybeSingle(),
+              ]);
+              studioId = profileRes.data?.studio_id ?? null;
 
-              const { data: claims } = await sb.auth.getClaims(token);
-              const userId = claims?.claims?.sub as string | undefined;
-
-              if (userId) {
-                // Fetch profile + onboarding
-                const [profileRes, onboardRes] = await Promise.all([
-                  sb.from("profiles").select("*").eq("id", userId).single(),
-                  sb.from("onboarding_data").select("*").eq("user_id", userId).maybeSingle(),
-                ]);
-
-                const profile = profileRes.data;
-                const onboarding = onboardRes.data as { data?: Record<string, any>; level?: string } | null;
-
-                // Build user context block
-                const parts: string[] = [];
-
-                if (onboarding?.data) {
-                  const o = onboarding.data;
-                  parts.push("## CONTEXTE UTILISATEUR");
-
-                  if (o.first_name || o.last_name) {
-                    parts.push(`Tu travailles avec ${o.first_name ?? ""} ${o.last_name ?? ""}${o.role ? ` (${o.role})` : ""}.`);
-                  }
-                  if (o.agency_name) parts.push(`Son agence : ${o.agency_name}`);
-                  if (o.comm_style) {
-                    const styleMap: Record<string, string> = {
-                      formel: "très formel et respectueux",
-                      direct: "direct et concis",
-                      amical: "amical et décontracté",
-                    };
-                    parts.push(`Style de communication : ${styleMap[o.comm_style] ?? o.comm_style}`);
-                  }
-                  if (o.politeness_formula) {
-                    parts.push(`Formule de politesse préférée : "${o.politeness_formula}"`);
-                  }
-                  if (o.email_signature) {
-                    parts.push(`Signature email :\n${o.email_signature}`);
-                  }
-                  if (o.email_example) {
-                    parts.push(`Exemple d'email type :\n${o.email_example}`);
-                  }
-                  if (o.specialties?.length > 0) {
-                    parts.push(`Spécialités : ${o.specialties.join(", ")}`);
-                  }
-                  if (o.approach) parts.push(`Approche architecturale : ${o.approach}`);
-                  if (o.software?.length > 0) parts.push(`Logiciels maîtrisés : ${o.software.join(", ")}`);
-                  if (o.references) parts.push(`Références architecturales : ${o.references}`);
-                  if (o.work_hours) parts.push(`Horaires de travail : ${o.work_hours}`);
-                  if (o.response_time) parts.push(`Délai de réponse souhaité : ${o.response_time}`);
-
-                  // Add to user context
-                  if (parts.length > 1) {
-                    userContext += parts.join("\n");
-                  }
-                }
-
-                // Fetch relevant memories based on the last user message
-                const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-                if (lastUserMsg) {
-                  const lastText = lastUserMsg.parts?.map((p) => (p.type === "text" ? (p as { text: string }).text : "")).join("").trim();
-
-                  if (lastText) {
-                    const keywords = lastText
-                      .toLowerCase().replace(/[?.,!;:()]/g, "")
-                      .split(/\s+/).filter((w) => w.length > 3).slice(0, 6);
-
-                    if (keywords.length > 0) {
-                      const conditions = keywords.map((kw) => `content.ilike.%${kw}%`);
-                      const memConditions = conditions.join(",");
-
-                      // Personal + project memories
-                      const { data: mems } = await sb
-                        .from("memories")
-                        .select("*")
-                        .eq("user_id", userId)
-                        .in("level", ["personal", "project"])
-                        .or(memConditions)
-                        .order("created_at", { ascending: false })
-                        .limit(8);
-
-                      // Studio memories
-                      const { data: profileData } = await sb
-                        .from("profiles")
-                        .select("studio_id")
-                        .eq("id", userId)
-                        .single();
-
-                      let studioMems: any[] = [];
-                      if (profileData?.studio_id) {
-                        const { data: sm } = await sb
-                          .from("memories")
-                          .select("*")
-                          .eq("level", "studio")
-                          .eq("studio_id", profileData.studio_id)
-                          .or(memConditions)
-                          .order("created_at", { ascending: false })
-                          .limit(6);
-                        studioMems = sm ?? [];
-                      }
-
-                      const allMems = [...(mems ?? []), ...studioMems];
-                      const seen = new Set<string>();
-                      const unique = allMems.filter((m) => {
-                        if (seen.has(m.id)) return false;
-                        seen.add(m.id);
-                        return true;
-                      }).slice(0, 12);
-
-                      if (unique.length > 0) {
-                        userContext += "\n\n## MÉMOIRES PERTINENTES\n";
-                        userContext += "Ces informations ont été précédemment enregistrées comme importantes. Utilise-les pour personnaliser ta réponse :\n\n";
-                        unique.forEach((m: any) => {
-                          const tag = m.level === "studio" ? "[AGENCE]" : m.level === "project" ? "[PROJET]" : "[PERSO]";
-                          userContext += `- ${tag} ${m.content}\n`;
-                        });
-                      }
-                    }
-                  }
-                }
+              const o = (onboardRes.data as { data?: Record<string, any> } | null)?.data;
+              if (o) {
+                const parts: string[] = ["## CONTEXTE UTILISATEUR"];
+                if (o.first_name || o.last_name)
+                  parts.push(`Collaborateur : ${o.first_name ?? ""} ${o.last_name ?? ""}${o.role ? ` (${o.role})` : ""}`.trim());
+                if (o.agency_name) parts.push(`Agence : ${o.agency_name}`);
+                if (o.comm_style) parts.push(`Style de communication : ${o.comm_style}`);
+                if (o.politeness_formula) parts.push(`Formule de politesse : "${o.politeness_formula}"`);
+                if (o.email_signature) parts.push(`Signature email :\n${o.email_signature}`);
+                if (o.specialties?.length) parts.push(`Spécialités : ${o.specialties.join(", ")}`);
+                if (o.approach) parts.push(`Approche : ${o.approach}`);
+                if (o.software?.length) parts.push(`Logiciels : ${o.software.join(", ")}`);
+                if (parts.length > 1) userContext = parts.join("\n");
               }
             }
           }
         } catch (e) {
-          console.error("[Chat] User context injection error:", e);
-          // Non-blocking — continue without user context
+          console.error("[chat] auth/context error:", e);
         }
 
-        const fullSystemPrompt = userContext
-          ? `${BASE_PROMPT}\n\n${userContext}`
-          : BASE_PROMPT;
+        // --- Tools ---
+        const tools = {
+          search_memories: tool({
+            description:
+              "Recherche dans la mémoire de l'agent (préférences personnelles, contexte projet, règles d'agence). À utiliser pour personnaliser tes réponses.",
+            inputSchema: z.object({
+              query: z.string().describe("Mots-clés ou question — ce que tu cherches à savoir"),
+            }),
+            execute: async ({ query }) => {
+              if (!sb || !userId) return { memories: [] };
+              const keywords = query.toLowerCase().replace(/[?.,!;:()]/g, "").split(/\s+/).filter((w) => w.length > 3).slice(0, 6);
+              if (keywords.length === 0) return { memories: [] };
+              const conds = keywords.map((k) => `content.ilike.%${k}%`).join(",");
+              const [personal, studio] = await Promise.all([
+                sb.from("memories").select("level, content").eq("user_id", userId).in("level", ["personal", "project"]).or(conds).limit(10),
+                studioId ? sb.from("memories").select("level, content").eq("level", "studio").eq("studio_id", studioId).or(conds).limit(6) : Promise.resolve({ data: [] as any[] }),
+              ]);
+              const all = [...(personal.data ?? []), ...(studio.data ?? [])].map((m: any) => ({
+                scope: m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO",
+                content: m.content,
+              }));
+              return { memories: all };
+            },
+          }),
 
-        const modelMessages = (messages as UIMessage[])
-          .map((m) => ({
-            role: m.role as "user" | "assistant" | "system",
-            content: (m.parts ?? [])
-              .map((p) => (p.type === "text" ? (p as { text: string }).text : ""))
-              .join("")
-              .trim(),
-          }))
-          .filter((m) => m.content.length > 0);
+          web_search: tool({
+            description:
+              "Recherche web en temps réel via Exa. Pour actualités, réglementations récentes, infos externes. Reformule la requête pour préciser le domaine architectural.",
+            inputSchema: z.object({
+              query: z.string().describe("Requête de recherche optimisée et contextualisée (ex: 'PLU Paris 2025 hauteur maximale')"),
+            }),
+            execute: async ({ query }) => {
+              const exaKey = process.env.EXA_API_KEY;
+              if (!exaKey) return { error: "Exa non configuré", results: [], answer: "" };
+              try {
+                const res = await fetch("https://api.exa.ai/answer", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "x-api-key": exaKey },
+                  body: JSON.stringify({ query, text: true }),
+                });
+                if (!res.ok) return { error: `Erreur Exa ${res.status}`, results: [], answer: "" };
+                const j = await res.json();
+                const answer: string = typeof j.answer === "string" ? j.answer : "";
+                const citations = (j.citations ?? []).slice(0, 6).map((c: any) => ({
+                  title: c.title ?? "Sans titre",
+                  url: c.url ?? "",
+                  text: typeof c.text === "string" ? c.text.slice(0, 1000) : "",
+                }));
+                return { answer, results: citations, query };
+              } catch (e) {
+                return { error: "Erreur réseau Exa", results: [], answer: "" };
+              }
+            },
+          }),
 
-        const mistral = createOpenAICompatible({
-          name: "mistral",
-          baseURL: "https://api.mistral.ai/v1",
-          headers: { Authorization: `Bearer ${key}` },
-        });
+          save_memory: tool({
+            description:
+              "Mémorise une info importante pour les conversations futures (préférence perso, contrainte projet, règle agence). Ne pas enregistrer les trivialités.",
+            inputSchema: z.object({
+              content: z.string().min(5).max(500).describe("Le fait à retenir, en une phrase précise"),
+              level: z.enum(["project", "personal", "studio"]).describe("Portée de la mémoire"),
+              project_id: z.string().uuid().nullable().optional().describe("UUID du projet (requis si level=project)"),
+            }),
+            execute: async ({ content, level, project_id }) => {
+              if (!sb || !userId) return { saved: false, error: "Non authentifié" };
+              if (level === "studio" && !studioId) return { saved: false, error: "Pas de studio rattaché" };
+              if (level === "project" && !project_id && !projectId) return { saved: false, error: "project_id requis" };
+              const { error } = await sb.from("memories").insert({
+                user_id: userId,
+                studio_id: level === "studio" ? studioId : null,
+                project_id: level === "project" ? (project_id ?? projectId) : null,
+                level,
+                content,
+              });
+              if (error) return { saved: false, error: error.message };
+              return { saved: true };
+            },
+          }),
+        };
+
+        const lightning = createLightningProvider(lightningKey);
+        const fullSystem = userContext ? `${BASE_PROMPT}\n\n${userContext}` : BASE_PROMPT;
 
         const result = streamText({
-          model: mistral("mistral-large-latest"),
-          system: fullSystemPrompt,
-          messages: modelMessages,
+          model: lightning(LIGHTNING_MODEL),
+          system: fullSystem,
+          messages: await convertToModelMessages(messages as UIMessage[]),
+          tools,
+          stopWhen: stepCountIs(50),
         });
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages as any,
-          headers: getRateLimitHeaders("CHAT", identifier),
+          headers: getRateLimitHeaders("CHAT", ip),
         });
       },
     },

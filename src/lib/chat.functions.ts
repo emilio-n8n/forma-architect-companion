@@ -186,32 +186,33 @@ export const generateSuggestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ messages: z.array(z.object({ role: z.string(), content: z.string() })) }).parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.MISTRAL_API_KEY;
+    const key = process.env.LIGHTNING_API_KEY;
     if (!key) return [];
     const history = data.messages.slice(-4).map((m) => ({ role: m.role, content: m.content }));
-    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    const res = await fetch("https://lightning.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "mistral-large-latest",
+        model: "anthropic/claude-opus-4-8",
         messages: [
           {
             role: "system",
             content:
-              "À partir de la conversation ci-dessous, génère 3 questions courtes et pertinentes " +
-              "que l'utilisateur pourrait poser ensuite. Réponds UNIQUEMENT par un tableau JSON " +
-              'de 3 chaînes, exemple: ["Question 1 ?", "Question 2 ?", "Question 3 ?"]. ' +
-              "Ne mets pas de markdown, pas de texte avant/après.",
+              "À partir de la conversation, génère 3 questions courtes et pertinentes que l'utilisateur pourrait poser ensuite. " +
+              'Réponds UNIQUEMENT par un tableau JSON, ex: ["Q1 ?", "Q2 ?", "Q3 ?"]. Pas de markdown, pas de texte avant/après.',
           },
           ...history,
         ],
+        max_tokens: 200,
       }),
     });
     if (!res.ok) return [];
     const json = await res.json();
     const text = json.choices?.[0]?.message?.content ?? "[]";
     try {
-      const parsed = JSON.parse(text);
+      const start = text.indexOf("[");
+      const end = text.lastIndexOf("]");
+      const parsed = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
       return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
     } catch {
       return [];
