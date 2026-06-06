@@ -22,7 +22,7 @@ export function ParcelSelector({
   const [section, setSection] = useState("");
   const [numero, setNumero] = useState("");
   const [commune, setCommune] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const doSearch = useCallback(async (q: string) => {
     if (q.length < 3) { setResults([]); return; }

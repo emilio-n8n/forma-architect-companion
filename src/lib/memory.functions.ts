@@ -200,8 +200,8 @@ export const saveMemoriesFromConversation = createServerFn({ method: "POST" })
       .single();
 
     // We use Mistral to extract important facts to remember
-    const { mistral } = await import("./ai-gateway");
-    const model = mistral("mistral-small-latest");
+    const mistralKey = process.env.MISTRAL_API_KEY;
+    if (!mistralKey) return { saved: 0 };
 
     const systemPrompt = `Tu es un assistant qui extrait des informations importantes à retenir d'une conversation.
 
@@ -231,14 +231,25 @@ Répond UNIQUEMENT avec un tableau JSON, jamais autre chose :
 
 Si rien à mémoriser, réponds []`;
 
-    const result = await model.generateText({
-      system: systemPrompt,
-      messages: [{ role: "user", content: data.content }],
+    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${mistralKey}` },
+      body: JSON.stringify({
+        model: "mistral-small-latest",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: data.content },
+        ],
+        temperature: 0.2,
+      }),
     });
+    if (!res.ok) return { saved: 0 };
+    const json = await res.json();
+    const resultText: string = json.choices?.[0]?.message?.content ?? "";
 
     try {
       // Try to parse as JSON
-      const text = result.text.trim();
+      const text = resultText.trim();
       // Find JSON array in the response
       const jsonStart = text.indexOf("[");
       const jsonEnd = text.lastIndexOf("]");

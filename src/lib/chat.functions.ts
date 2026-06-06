@@ -20,13 +20,13 @@ export const ensureConversation = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
     if (existing) return { id: existing.id };
-    const { data, error } = await supabase
+    const { data: created, error } = await supabase
       .from("conversations")
       .insert({ user_id: userId, project_id: projectId })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    return { id: data.id };
+    return { id: created.id };
   });
 
 export const loadMessages = createServerFn({ method: "POST" })
