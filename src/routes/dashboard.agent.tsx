@@ -15,8 +15,10 @@ import {
   Send,
   PanelRightOpen,
   PanelRightClose,
-  Globe,
   PenLine,
+  Search,
+  Brain,
+  Bookmark,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -28,9 +30,7 @@ import {
   generateSuggestions,
   listConversations,
   deleteConversation,
-  searchWeb,
 } from "@/lib/chat.functions";
-import { saveMemoriesFromConversation } from "@/lib/memory.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
