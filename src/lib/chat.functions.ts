@@ -186,14 +186,14 @@ export const generateSuggestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ messages: z.array(z.object({ role: z.string(), content: z.string() })) }).parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.LIGHTNING_API_KEY;
+    const key = process.env.ZEN_API_KEY;
     if (!key) return [];
     const history = data.messages.slice(-4).map((m) => ({ role: m.role, content: m.content }));
-    const res = await fetch("https://lightning.ai/api/v1/chat/completions", {
+    const res = await fetch("https://opencode.ai/zen/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "lightning-ai/gpt-oss-120b",
+        model: "minimax-m3-free",
         messages: [
           {
             role: "system",

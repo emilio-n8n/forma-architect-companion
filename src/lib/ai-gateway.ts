@@ -1,20 +1,15 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-/**
- * Lightning AI — OpenAI-compatible gateway hosting Claude Opus 4.8.
- * Used as the primary LLM for chat, tool-calling, and reasoning.
- */
-export function createLightningProvider(apiKey: string) {
+export function createZenProvider(apiKey: string) {
   return createOpenAICompatible({
-    name: "lightning",
-    baseURL: "https://lightning.ai/api/v1",
+    name: "opencode-zen",
+    baseURL: "https://opencode.ai/zen/v1",
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 }
 
-export const LIGHTNING_MODEL = "lightning-ai/gpt-oss-120b";
+export const ZEN_MODEL = process.env.ZEN_MODEL || "minimax-m3-free";
 
-// Legacy providers kept for any non-migrated call site.
 export function createLovableAiGatewayProvider(apiKey: string) {
   return createOpenAICompatible({
     name: "lovable-ai-gateway",

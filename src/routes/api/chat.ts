@@ -3,7 +3,7 @@ import { streamText, tool, stepCountIs, convertToModelMessages, type UIMessage }
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, getRateLimitHeaders } from "@/lib/rate-limiter";
-import { createLightningProvider, LIGHTNING_MODEL } from "@/lib/ai-gateway";
+import { createZenProvider, ZEN_MODEL } from "@/lib/ai-gateway";
 import type { Database } from "@/integrations/supabase/types";
 
 const BASE_PROMPT = `Tu es FORMA Agent, assistant IA spécialisé en architecture française.
@@ -52,9 +52,9 @@ export const Route = createFileRoute("/api/chat")({
         const { messages } = (await request.json()) as { messages?: UIMessage[] };
         if (!Array.isArray(messages)) return new Response("messages required", { status: 400 });
 
-        const lightningKey = process.env.LIGHTNING_API_KEY;
-        if (!lightningKey) {
-          console.error("[chat] LIGHTNING_API_KEY missing");
+        const zenKey = process.env.ZEN_API_KEY;
+        if (!zenKey) {
+          console.error("[chat] ZEN_API_KEY missing");
           return new Response("Server configuration error", { status: 500 });
         }
 
@@ -185,11 +185,11 @@ export const Route = createFileRoute("/api/chat")({
           }),
         };
 
-        const lightning = createLightningProvider(lightningKey);
+        const zen = createZenProvider(zenKey);
         const fullSystem = userContext ? `${BASE_PROMPT}\n\n${userContext}` : BASE_PROMPT;
 
         const result = streamText({
-          model: lightning(LIGHTNING_MODEL),
+          model: zen(ZEN_MODEL),
           system: fullSystem,
           messages: await convertToModelMessages(messages as UIMessage[]),
           tools,
