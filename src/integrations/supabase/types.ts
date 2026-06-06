@@ -165,6 +165,7 @@ export type Database = {
           budget: string
           created_at: string
           id: string
+          input_data: Json | null
           levels: number
           surface: number
           user_id: string
@@ -175,6 +176,7 @@ export type Database = {
           budget: string
           created_at?: string
           id?: string
+          input_data?: Json | null
           levels: number
           surface: number
           user_id: string
@@ -185,6 +187,7 @@ export type Database = {
           budget?: string
           created_at?: string
           id?: string
+          input_data?: Json | null
           levels?: number
           surface?: number
           user_id?: string

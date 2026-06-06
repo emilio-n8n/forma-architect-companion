@@ -1,0 +1,1 @@
+alter table public.plans add column if not exists input_data jsonb;
