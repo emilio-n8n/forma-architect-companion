@@ -398,12 +398,14 @@ function ChatInner({
             );
           }
           return (
-            <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed text-[#d4d4d4]">
+            <div key={m.id} className="flex flex-col gap-3 text-sm leading-relaxed text-[#d4d4d4]">
+              <ToolActivity parts={m.parts} />
               <ReactMarkdownContent
                 text={text}
                 onOpenContent={onOpenContent}
                 messageIdx={idx}
               />
+
               <div className="flex gap-3 text-[#a3a3a3] mt-1">
                 <button
                   className="hover:text-[#e5e5e5]"
