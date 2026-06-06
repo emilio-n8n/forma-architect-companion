@@ -13,14 +13,14 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as DashboardStudioRouteImport } from './routes/dashboard.studio'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardRenderRouteImport } from './routes/dashboard.render'
 import { Route as DashboardProjetsRouteImport } from './routes/dashboard.projets'
-import { Route as DashboardMiniArchiRouteImport } from './routes/dashboard.mini-archi'
-import { Route as DashboardAgentRouteImport } from './routes/dashboard.agent'
 import { Route as DashboardOnboardingRouteImport } from './routes/dashboard.onboarding'
-import { Route as DashboardStudioRouteImport } from './routes/dashboard.studio'
+import { Route as DashboardMiniArchiRouteImport } from './routes/dashboard.mini-archi'
 import { Route as DashboardMemoriesRouteImport } from './routes/dashboard.memories'
+import { Route as DashboardAgentRouteImport } from './routes/dashboard.agent'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -43,6 +43,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardStudioRoute = DashboardStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -58,29 +63,24 @@ const DashboardProjetsRoute = DashboardProjetsRouteImport.update({
   path: '/projets',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardMiniArchiRoute = DashboardMiniArchiRouteImport.update({
-  id: '/mini-archi',
-  path: '/mini-archi',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardAgentRoute = DashboardAgentRouteImport.update({
-  id: '/agent',
-  path: '/agent',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const DashboardOnboardingRoute = DashboardOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardStudioRoute = DashboardStudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
+const DashboardMiniArchiRoute = DashboardMiniArchiRouteImport.update({
+  id: '/mini-archi',
+  path: '/mini-archi',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardMemoriesRoute = DashboardMemoriesRouteImport.update({
   id: '/memories',
   path: '/memories',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAgentRoute = DashboardAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
   getParentRoute: () => DashboardRoute,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -95,28 +95,28 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/api/chat': typeof ApiChatRoute
   '/dashboard/agent': typeof DashboardAgentRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
   '/dashboard/mini-archi': typeof DashboardMiniArchiRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/projets': typeof DashboardProjetsRoute
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/studio': typeof DashboardStudioRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
   '/dashboard/agent': typeof DashboardAgentRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
   '/dashboard/mini-archi': typeof DashboardMiniArchiRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/projets': typeof DashboardProjetsRoute
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard': typeof DashboardIndexRoute
-  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/studio': typeof DashboardStudioRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,14 +125,14 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/api/chat': typeof ApiChatRoute
   '/dashboard/agent': typeof DashboardAgentRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
   '/dashboard/mini-archi': typeof DashboardMiniArchiRoute
+  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/projets': typeof DashboardProjetsRoute
   '/dashboard/render': typeof DashboardRenderRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/': typeof DashboardIndexRoute
-  '/dashboard/onboarding': typeof DashboardOnboardingRoute
   '/dashboard/studio': typeof DashboardStudioRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -142,28 +142,28 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/chat'
     | '/dashboard/agent'
+    | '/dashboard/memories'
     | '/dashboard/mini-archi'
+    | '/dashboard/onboarding'
     | '/dashboard/projets'
     | '/dashboard/render'
     | '/dashboard/settings'
-    | '/dashboard/'
-    | '/dashboard/onboarding'
     | '/dashboard/studio'
-    | '/dashboard/memories'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/api/chat'
     | '/dashboard/agent'
+    | '/dashboard/memories'
     | '/dashboard/mini-archi'
+    | '/dashboard/onboarding'
     | '/dashboard/projets'
     | '/dashboard/render'
     | '/dashboard/settings'
-    | '/dashboard'
-    | '/dashboard/onboarding'
     | '/dashboard/studio'
-    | '/dashboard/memories'
+    | '/dashboard'
   id:
     | '__root__'
     | '/'
@@ -171,14 +171,14 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/chat'
     | '/dashboard/agent'
+    | '/dashboard/memories'
     | '/dashboard/mini-archi'
+    | '/dashboard/onboarding'
     | '/dashboard/projets'
     | '/dashboard/render'
     | '/dashboard/settings'
-    | '/dashboard/'
-    | '/dashboard/onboarding'
     | '/dashboard/studio'
-    | '/dashboard/memories'
+    | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -218,6 +218,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/studio': {
+      id: '/dashboard/studio'
+      path: '/studio'
+      fullPath: '/dashboard/studio'
+      preLoaderRoute: typeof DashboardStudioRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/settings': {
       id: '/dashboard/settings'
       path: '/settings'
@@ -239,11 +246,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjetsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/onboarding': {
+      id: '/dashboard/onboarding'
+      path: '/onboarding'
+      fullPath: '/dashboard/onboarding'
+      preLoaderRoute: typeof DashboardOnboardingRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/mini-archi': {
       id: '/dashboard/mini-archi'
       path: '/mini-archi'
       fullPath: '/dashboard/mini-archi'
       preLoaderRoute: typeof DashboardMiniArchiRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/memories': {
+      id: '/dashboard/memories'
+      path: '/memories'
+      fullPath: '/dashboard/memories'
+      preLoaderRoute: typeof DashboardMemoriesRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/agent': {
@@ -260,52 +281,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/onboarding': {
-      id: '/dashboard/onboarding'
-      path: '/onboarding'
-      fullPath: '/dashboard/onboarding'
-      preLoaderRoute: typeof DashboardOnboardingRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/studio': {
-      id: '/dashboard/studio'
-      path: '/studio'
-      fullPath: '/dashboard/studio'
-      preLoaderRoute: typeof DashboardStudioRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/memories': {
-      id: '/dashboard/memories'
-      path: '/memories'
-      fullPath: '/dashboard/memories'
-      preLoaderRoute: typeof DashboardMemoriesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
   }
 }
 
 interface DashboardRouteChildren {
   DashboardAgentRoute: typeof DashboardAgentRoute
+  DashboardMemoriesRoute: typeof DashboardMemoriesRoute
   DashboardMiniArchiRoute: typeof DashboardMiniArchiRoute
+  DashboardOnboardingRoute: typeof DashboardOnboardingRoute
   DashboardProjetsRoute: typeof DashboardProjetsRoute
   DashboardRenderRoute: typeof DashboardRenderRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
-  DashboardIndexRoute: typeof DashboardIndexRoute
-  DashboardOnboardingRoute: typeof DashboardOnboardingRoute
   DashboardStudioRoute: typeof DashboardStudioRoute
-  DashboardMemoriesRoute: typeof DashboardMemoriesRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAgentRoute: DashboardAgentRoute,
+  DashboardMemoriesRoute: DashboardMemoriesRoute,
   DashboardMiniArchiRoute: DashboardMiniArchiRoute,
+  DashboardOnboardingRoute: DashboardOnboardingRoute,
   DashboardProjetsRoute: DashboardProjetsRoute,
   DashboardRenderRoute: DashboardRenderRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
-  DashboardIndexRoute: DashboardIndexRoute,
-  DashboardOnboardingRoute: DashboardOnboardingRoute,
   DashboardStudioRoute: DashboardStudioRoute,
-  DashboardMemoriesRoute: DashboardMemoriesRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
@@ -321,3 +321,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

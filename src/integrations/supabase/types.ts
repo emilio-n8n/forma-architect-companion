@@ -18,7 +18,6 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          project_id: string | null
           title: string
           updated_at: string
           user_id: string
@@ -26,7 +25,6 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          project_id?: string | null
           title?: string
           updated_at?: string
           user_id: string
@@ -34,20 +32,11 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
-          project_id?: string | null
           title?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "conversations_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       messages: {
         Row: {
@@ -124,9 +113,6 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
-          onboarding_completed: boolean
-          onboarding_level: string | null
-          studio_id: string | null
           updated_at: string
         }
         Insert: {
@@ -135,9 +121,6 @@ export type Database = {
           created_at?: string
           email?: string | null
           id: string
-          onboarding_completed?: boolean
-          onboarding_level?: string | null
-          studio_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -146,20 +129,9 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
-          onboarding_completed?: boolean
-          onboarding_level?: string | null
-          studio_id?: string | null
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_studio_id_fkey"
-            columns: ["studio_id"]
-            isOneToOne: false
-            referencedRelation: "studios"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       projects: {
         Row: {
@@ -243,134 +215,6 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      studios: {
-        Row: {
-          created_at: string
-          created_by: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          created_by: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      studio_members: {
-        Row: {
-          id: string
-          joined_at: string
-          role: string
-          studio_id: string
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          joined_at?: string
-          role?: string
-          studio_id: string
-          user_id: string
-        }
-        Update: {
-          id?: string
-          joined_at?: string
-          role?: string
-          studio_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "studio_members_studio_id_fkey"
-            columns: ["studio_id"]
-            isOneToOne: false
-            referencedRelation: "studios"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      onboarding_data: {
-        Row: {
-          completed_at: string
-          data: Json
-          id: string
-          level: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          completed_at?: string
-          data?: Json
-          id?: string
-          level: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          completed_at?: string
-          data?: Json
-          id?: string
-          level?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      memories: {
-        Row: {
-          content: string
-          created_at: string
-          id: string
-          level: string
-          project_id: string | null
-          studio_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string
-          id?: string
-          level: string
-          project_id?: string | null
-          studio_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          content?: string
-          created_at?: string
-          id?: string
-          level?: string
-          project_id?: string | null
-          studio_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "memories_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "memories_studio_id_fkey"
-            columns: ["studio_id"]
-            isOneToOne: false
-            referencedRelation: "studios"
             referencedColumns: ["id"]
           },
         ]
