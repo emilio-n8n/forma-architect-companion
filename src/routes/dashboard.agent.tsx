@@ -180,21 +180,14 @@ function ChatInner({
       if (text) onSave("assistant", text);
 
       if (text && messages.length >= 2) {
-        // Save memories from this exchange
         const recent = [...messages, message]
-          .slice(-2)
+          .slice(-4)
           .map((m) => {
             const t = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim();
             return { role: m.role, content: t };
-          });
-        const exchangeText = recent
-          .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-          .join("\n\n");
-
-        saveMemFn({ data: { content: exchangeText } }).catch(() => {});
-
-        // Generate suggestions
-        suggestFn({ data: { messages: recent.slice(-4) } })
+          })
+          .filter((m) => m.content.length > 0);
+        suggestFn({ data: { messages: recent } })
           .then((s) => setSuggestions(s))
           .catch(() => {});
       }
