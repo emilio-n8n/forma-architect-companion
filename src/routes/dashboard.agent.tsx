@@ -509,19 +509,6 @@ function ChatInner({
                 <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
                 Canvas
               </button>
-              <button
-                type="button"
-                onClick={() => setForceWebNext((v) => !v)}
-                className={`flex items-center gap-1.5 border text-xs px-2.5 py-1 rounded-full transition-colors ${
-                  forceWebNext
-                    ? "bg-[#dcb383]/15 border-[#dcb383]/40 text-[#dcb383]"
-                    : "bg-[#2a2a2a] border-[#3f3f3f] text-[#a3a3a3] hover:text-[#e5e5e5]"
-                }`}
-                title="Forcer une recherche web pour le prochain message"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                Web
-              </button>
             </div>
             <div className="flex items-center gap-2">
               <button
