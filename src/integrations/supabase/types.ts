@@ -355,6 +355,13 @@ export type Database = {
             referencedRelation: "studios"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "studio_members_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       studios: {
