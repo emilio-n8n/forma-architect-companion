@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  Sparkles, MessageSquare, LayoutGrid, FolderKanban, Settings, LogOut, Layers,
+  Sparkles, MessageSquare, FolderKanban, Settings, LogOut, Layers,
   Users, BrainCircuit,
 } from "lucide-react";
 import {
@@ -8,6 +8,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
 
 const items = [
@@ -27,12 +28,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-4 py-5 border-b border-sidebar-border">
         <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-sm gold-gradient flex items-center justify-center">
-            <LayoutGrid className="h-4 w-4 text-primary-foreground" />
-          </div>
-          {!collapsed && (
-            <span className="font-display text-2xl tracking-wide text-primary">FORMA</span>
-          )}
+          <Logo variant={collapsed ? "icon" : "full"} size={32} className="text-primary" />
         </Link>
       </SidebarHeader>
 

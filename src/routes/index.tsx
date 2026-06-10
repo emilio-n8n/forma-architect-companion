@@ -12,6 +12,7 @@ import {
   Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/Logo";
 import { useState, useRef } from "react";
 
 export const Route = createFileRoute("/")({
@@ -146,10 +147,7 @@ function Landing() {
       <header className="sticky top-0 z-50 backdrop-blur-md border-b border-border/20 bg-background/70 transition-all duration-300">
         <div className="mx-auto max-w-7xl px-6 h-20 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="h-9 w-9 rounded-sm gold-gradient flex items-center justify-center shadow-lg shadow-primary/10 transition-transform duration-500 group-hover:rotate-[90deg]">
-              <Compass className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="font-display text-2xl tracking-[0.15em] text-primary">FORMA</span>
+            <Logo variant="full" size={28} className="text-primary transition-transform duration-500 group-hover:scale-105" />
           </Link>
 
           <nav className="hidden md:flex items-center gap-10 text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -641,10 +639,7 @@ function Landing() {
             {/* Top bar */}
             <div className="flex items-center justify-between px-6 h-14 border-b border-border/20 bg-background/50">
               <div className="flex items-center gap-3">
-                <div className="h-6 w-6 rounded gold-gradient flex items-center justify-center">
-                  <Compass className="h-3 w-3 text-primary-foreground" />
-                </div>
-                <span className="font-display text-sm tracking-[0.15em] text-primary">FORMA</span>
+                <Logo size={18} className="text-primary" />
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-4 border-l border-border/20 pl-4">Studio</span>
               </div>
               <div className="flex items-center gap-2">
@@ -766,12 +761,7 @@ function Landing() {
       <footer className="border-t border-border/20 py-20 bg-background relative">
         <div className="mx-auto max-w-7xl px-6 grid grid-cols-1 md:grid-cols-4 gap-12 text-left mb-16">
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-7 w-7 rounded-sm gold-gradient flex items-center justify-center">
-                <Compass className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="font-display text-xl tracking-[0.15em] text-primary">FORMA</span>
-            </div>
+            <Logo size={22} className="text-primary" />
             <p className="text-[11px] text-muted-foreground leading-relaxed font-light">
               La plateforme tout-en-un pour les agences d'architecture. Rendu, réglementation et gestion de projets.
             </p>

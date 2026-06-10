@@ -101,7 +101,7 @@ function DashboardLayout() {
         <div className="flex-1 flex flex-col">
           <header className="h-14 flex items-center gap-3 border-b border-border/40 px-4">
             <SidebarTrigger className="hover:bg-primary/15 hover:text-primary" />
-            <span className="text-xs text-muted-foreground uppercase tracking-widest">FORMA Studio</span>
+            <Logo variant="wordmark" size={14} className="text-muted-foreground" />
           </header>
           <main className="flex-1 overflow-auto">
             <Outlet />

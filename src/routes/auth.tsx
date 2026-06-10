@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Logo } from "@/components/Logo";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -56,7 +57,7 @@ function AuthPage() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 bg-card border-r border-border/40">
-        <Link to="/" className="font-display text-2xl text-primary">FORMA</Link>
+        <Link to="/"><Logo size={24} className="text-primary" /></Link>
         <div>
           <p className="font-display text-4xl leading-tight max-w-md">
             « <span className="text-gradient-gold">L'espace est le souffle de l'art.</span> »
