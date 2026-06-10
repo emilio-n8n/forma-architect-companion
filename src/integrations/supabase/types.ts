@@ -51,31 +51,46 @@ export type Database = {
       }
       memories: {
         Row: {
+          category: string | null
           content: string
           created_at: string
+          freshness_score: number
           id: string
+          is_active: boolean
+          last_accessed: string | null
           level: string
           project_id: string | null
+          source_conversation_id: string | null
           studio_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          category?: string | null
           content: string
           created_at?: string
+          freshness_score?: number
           id?: string
+          is_active?: boolean
+          last_accessed?: string | null
           level: string
           project_id?: string | null
+          source_conversation_id?: string | null
           studio_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          category?: string | null
           content?: string
           created_at?: string
+          freshness_score?: number
           id?: string
+          is_active?: boolean
+          last_accessed?: string | null
           level?: string
           project_id?: string | null
+          source_conversation_id?: string | null
           studio_id?: string | null
           updated_at?: string
           user_id?: string
@@ -89,6 +104,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "memories_source_conversation_id_fkey"
+            columns: ["source_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "memories_studio_id_fkey"
             columns: ["studio_id"]
             isOneToOne: false
@@ -96,6 +118,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      memory_summaries: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          summary: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       messages: {
         Row: {
