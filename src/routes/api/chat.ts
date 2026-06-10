@@ -259,7 +259,11 @@ export const Route = createFileRoute("/api/chat")({
         };
 
         const zen = createZenProvider(zenKey);
-        const fullSystem = userContext ? `${BASE_PROMPT}\n\n${userContext}` : BASE_PROMPT;
+        const now = new Date();
+        const dateStr = now.toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        const timeStr = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        const datePrompt = `${BASE_PROMPT}\n\n## DATE ET HEURE\nNous sommes le ${dateStr} à ${timeStr}. Utilise cette date pour tout calcul temporel.`;
+        const fullSystem = userContext ? `${datePrompt}\n\n${userContext}` : datePrompt;
 
         const result = streamText({
           model: zen(ZEN_MODEL),
