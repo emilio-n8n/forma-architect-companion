@@ -209,7 +209,7 @@ Analyse ces conversations et la mémoire existante. Quoi de nouveau ? Quoi mettr
 
       const { error } = await supabase
         .from("memories")
-        .update(patch)
+        .update(patch as any)
         .eq("id", upd.memory_id)
         .eq("user_id", userId);
       if (!error) updateCount++;

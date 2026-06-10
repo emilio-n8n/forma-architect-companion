@@ -75,7 +75,7 @@ export const searchMemories = createServerFn({ method: "POST" })
         .eq("is_active", true)
         .in("level", ["personal", "project"])
         .or(conditions.join(","))
-        .order("freshness_score", { ascending: false, nulls: "last" })
+        .order("freshness_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(10);
 
@@ -92,7 +92,7 @@ export const searchMemories = createServerFn({ method: "POST" })
         .eq("studio_id", profile.studio_id)
         .eq("is_active", true)
         .or(conditions.join(","))
-        .order("freshness_score", { ascending: false, nulls: "last" })
+        .order("freshness_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(6);
 
@@ -152,7 +152,7 @@ export const listMemories = createServerFn({ method: "POST" })
     }
 
     const { data: personal, error } = await query
-      .order("freshness_score", { ascending: false, nulls: "last" })
+      .order("freshness_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -168,7 +168,7 @@ export const listMemories = createServerFn({ method: "POST" })
         .eq("level", "studio")
         .eq("studio_id", profile.studio_id)
         .eq("is_active", true)
-        .order("freshness_score", { ascending: false, nulls: "last" })
+        .order("freshness_score", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -345,7 +345,7 @@ export const updateMemory = createServerFn({ method: "POST" })
 
     const { error } = await supabase
       .from("memories")
-      .update(patch)
+      .update(patch as any)
       .eq("id", data.memoryId)
       .eq("user_id", userId);
 

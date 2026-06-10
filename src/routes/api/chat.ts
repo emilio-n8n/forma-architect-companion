@@ -251,7 +251,7 @@ export const Route = createFileRoute("/api/chat")({
               const patch: Record<string, any> = { content, updated_at: new Date().toISOString() };
               if (category !== undefined) patch.category = category;
               if (freshness_score !== undefined) patch.freshness_score = freshness_score;
-              const { error } = await sb.from("memories").update(patch).eq("id", memory_id).eq("user_id", userId);
+              const { error } = await sb.from("memories").update(patch as any).eq("id", memory_id).eq("user_id", userId);
               if (error) return { saved: false, error: error.message };
               return { saved: true };
             },
