@@ -5,11 +5,10 @@ import { CreateMemorySchema, type Memory } from "./memory.types";
 
 export const createMemory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => CreateMemorySchema.extend({ project_id: z.string().uuid().nullable().optional() }).parse(d))
+  .inputValidator((d: unknown) => CreateMemorySchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    // Get user's studio
     const { data: profile } = await supabase
       .from("profiles")
       .select("studio_id")
@@ -21,7 +20,11 @@ export const createMemory = createServerFn({ method: "POST" })
       studio_id: profile?.studio_id ?? null,
       project_id: data.project_id ?? null,
       level: data.level,
+      category: data.category ?? null,
       content: data.content,
+      freshness_score: data.freshness_score ?? 1.0,
+      source_conversation_id: data.source_conversation_id ?? null,
+      is_active: true,
     });
 
     if (error) throw new Error(error.message);
@@ -62,15 +65,17 @@ export const searchMemories = createServerFn({ method: "POST" })
     // Build ILIKE conditions
     const conditions = keywords.map((kw) => `content.ilike.%${kw}%`);
 
-    // Search personal memories
+    // Search personal memories — only active, ranked by freshness_score
     let personalMemories: any[] = [];
     if (conditions.length > 0) {
       const { data: personal } = await supabase
         .from("memories")
         .select("*")
         .eq("user_id", userId)
+        .eq("is_active", true)
         .in("level", ["personal", "project"])
         .or(conditions.join(","))
+        .order("freshness_score", { ascending: false, nulls: "last" })
         .order("created_at", { ascending: false })
         .limit(10);
 
@@ -85,9 +90,11 @@ export const searchMemories = createServerFn({ method: "POST" })
         .select("*")
         .eq("level", "studio")
         .eq("studio_id", profile.studio_id)
+        .eq("is_active", true)
         .or(conditions.join(","))
+        .order("freshness_score", { ascending: false, nulls: "last" })
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(6);
 
       studioMemories = studio ?? [];
     }
@@ -99,6 +106,15 @@ export const searchMemories = createServerFn({ method: "POST" })
       seen.add(m.id);
       return true;
     }).slice(0, 15);
+
+    // Update last_accessed for returned memories
+    if (combined.length > 0) {
+      const ids = combined.map((m: any) => m.id);
+      await supabase
+        .from("memories")
+        .update({ last_accessed: new Date().toISOString() })
+        .in("id", ids);
+    }
 
     return combined as Memory[];
   });
@@ -119,7 +135,7 @@ export const listMemories = createServerFn({ method: "POST" })
       .eq("id", userId)
       .single();
 
-    let query = supabase.from("memories").select("*");
+    let query = supabase.from("memories").select("*").eq("is_active", true);
 
     if (data.level === "studio" && profile?.studio_id) {
       query = query.eq("level", "studio").eq("studio_id", profile.studio_id);
@@ -136,6 +152,7 @@ export const listMemories = createServerFn({ method: "POST" })
     }
 
     const { data: personal, error } = await query
+      .order("freshness_score", { ascending: false, nulls: "last" })
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -150,6 +167,8 @@ export const listMemories = createServerFn({ method: "POST" })
         .select("*")
         .eq("level", "studio")
         .eq("studio_id", profile.studio_id)
+        .eq("is_active", true)
+        .order("freshness_score", { ascending: false, nulls: "last" })
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -256,7 +275,7 @@ Si rien à mémoriser, réponds []`;
       if (jsonStart === -1 || jsonEnd === -1) return { saved: 0 };
 
       const jsonStr = text.slice(jsonStart, jsonEnd + 1);
-      const memories: Array<{ content: string; level: string }> = JSON.parse(jsonStr);
+      const memories: Array<{ content: string; level: string; category?: string }> = JSON.parse(jsonStr);
 
       if (!Array.isArray(memories) || memories.length === 0) return { saved: 0 };
 
@@ -279,6 +298,7 @@ Si rien à mémoriser, réponds []`;
           .select("id")
           .eq("user_id", userId)
           .eq("level", mem.level)
+          .eq("is_active", true)
           .ilike("content", `%${mem.content.slice(0, 40)}%`)
           .maybeSingle();
 
@@ -289,7 +309,10 @@ Si rien à mémoriser, réponds []`;
           studio_id: mem.level === "studio" ? profile!.studio_id : null,
           project_id: projectId,
           level: mem.level,
+          category: mem.category ?? "general",
           content: mem.content,
+          freshness_score: 0.9,
+          is_active: true,
         });
 
         if (!error) saved++;
@@ -300,4 +323,66 @@ Si rien à mémoriser, réponds []`;
       // Parsing failed, silently ignore
       return { saved: 0 };
     }
+  });
+
+export const updateMemory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      memoryId: z.string().uuid(),
+      content: z.string().min(1).max(10000).optional(),
+      category: z.enum(["preferences", "projects", "work_style", "constraints", "general"]).optional(),
+      freshness_score: z.number().min(0).max(1).optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const patch: Record<string, any> = {};
+    if (data.content !== undefined) patch.content = data.content;
+    if (data.category !== undefined) patch.category = data.category;
+    if (data.freshness_score !== undefined) patch.freshness_score = data.freshness_score;
+    patch.updated_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("memories")
+      .update(patch)
+      .eq("id", data.memoryId)
+      .eq("user_id", userId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
+
+export const deactivateMemory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ memoryId: z.string().uuid() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("memories")
+      .update({ is_active: false, freshness_score: 0, updated_at: new Date().toISOString() })
+      .eq("id", data.memoryId)
+      .eq("user_id", userId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
+
+export const reactivateMemory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ memoryId: z.string().uuid(), freshness_score: z.number().min(0).max(1).default(0.8) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("memories")
+      .update({ is_active: true, freshness_score: data.freshness_score, updated_at: new Date().toISOString() })
+      .eq("id", data.memoryId)
+      .eq("user_id", userId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
   });

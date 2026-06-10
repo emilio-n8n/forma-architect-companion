@@ -79,15 +79,21 @@ export const Route = createFileRoute("/api/chat")({
             userId = (claims?.claims?.sub as string | undefined) ?? null;
 
             if (userId) {
-              const [profileRes, onboardRes] = await Promise.all([
+              const [profileRes, onboardRes, summaryRes, memRes] = await Promise.all([
                 sb.from("profiles").select("studio_id").eq("id", userId).single(),
                 sb.from("onboarding_data").select("data").eq("user_id", userId).maybeSingle(),
+                sb.from("memory_summaries").select("category, summary").eq("user_id", userId),
+                sb.from("memories").select("content, level, category, freshness_score")
+                  .eq("user_id", userId).eq("is_active", true)
+                  .order("freshness_score", { ascending: false })
+                  .order("created_at", { ascending: false })
+                  .limit(10),
               ]);
               studioId = profileRes.data?.studio_id ?? null;
 
+              const parts: string[] = [];
               const o = (onboardRes.data as { data?: Record<string, any> } | null)?.data;
               if (o) {
-                const parts: string[] = ["## CONTEXTE UTILISATEUR"];
                 if (o.first_name || o.last_name)
                   parts.push(`Collaborateur : ${o.first_name ?? ""} ${o.last_name ?? ""}${o.role ? ` (${o.role})` : ""}`.trim());
                 if (o.agency_name) parts.push(`Agence : ${o.agency_name}`);
@@ -97,7 +103,24 @@ export const Route = createFileRoute("/api/chat")({
                 if (o.specialties?.length) parts.push(`Spécialités : ${o.specialties.join(", ")}`);
                 if (o.approach) parts.push(`Approche : ${o.approach}`);
                 if (o.software?.length) parts.push(`Logiciels : ${o.software.join(", ")}`);
-                if (parts.length > 1) userContext = parts.join("\n");
+              }
+              if (parts.length > 0) userContext = "## CONTEXTE UTILISATEUR\n" + parts.join("\n");
+
+              // Inject synthesized memory summaries
+              const summaries = summaryRes.data ?? [];
+              if (summaries.length > 0) {
+                const summaryLines = summaries.map((s: any) => `[${s.category}] : ${s.summary}`);
+                userContext += "\n\n## MÉMOIRE SYNTHÉTISÉE\n" + summaryLines.join("\n");
+              }
+
+              // Inject recent active memories
+              const recentMems = memRes.data ?? [];
+              if (recentMems.length > 0) {
+                const memLines = recentMems.slice(0, 8).map((m: any) => {
+                  const scope = m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO";
+                  return `[${scope}${m.category ? `/ ${m.category}` : ""}] ${m.content}`;
+                });
+                userContext += "\n\n## SOUVENIRS RÉCENTS\n" + memLines.join("\n");
               }
             }
           }
@@ -119,11 +142,25 @@ export const Route = createFileRoute("/api/chat")({
               if (keywords.length === 0) return { memories: [] };
               const conds = keywords.map((k) => `content.ilike.%${k}%`).join(",");
               const [personal, studio] = await Promise.all([
-                sb.from("memories").select("level, content").eq("user_id", userId).in("level", ["personal", "project"]).or(conds).limit(10),
-                studioId ? sb.from("memories").select("level, content").eq("level", "studio").eq("studio_id", studioId).or(conds).limit(6) : Promise.resolve({ data: [] as any[] }),
+                sb.from("memories").select("level, content, freshness_score, category")
+                  .eq("user_id", userId).eq("is_active", true)
+                  .in("level", ["personal", "project"]).or(conds)
+                  .order("freshness_score", { ascending: false }).limit(10),
+                studioId
+                  ? sb.from("memories").select("level, content, freshness_score, category")
+                    .eq("level", "studio").eq("studio_id", studioId).eq("is_active", true)
+                    .or(conds).order("freshness_score", { ascending: false }).limit(6)
+                  : Promise.resolve({ data: [] as any[] }),
               ]);
+              // Update last_accessed
+              const allIds = [...(personal.data ?? []), ...(studio.data ?? [])].map((m: any) => m.id).filter(Boolean);
+              if (allIds.length > 0) {
+                sb.from("memories").update({ last_accessed: new Date().toISOString() }).in("id", allIds).then(() => {});
+              }
               const all = [...(personal.data ?? []), ...(studio.data ?? [])].map((m: any) => ({
                 scope: m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO",
+                category: m.category,
+                freshness: m.freshness_score,
                 content: m.content,
               }));
               return { memories: all };
@@ -166,9 +203,10 @@ export const Route = createFileRoute("/api/chat")({
             inputSchema: z.object({
               content: z.string().min(5).max(500).describe("Le fait à retenir, en une phrase précise"),
               level: z.enum(["project", "personal", "studio"]).describe("Portée de la mémoire"),
+              category: z.enum(["preferences", "projects", "work_style", "constraints", "general"]).optional().describe("Catégorie de la mémoire"),
               project_id: z.string().uuid().nullable().optional().describe("UUID du projet (requis si level=project)"),
             }),
-            execute: async ({ content, level, project_id }) => {
+            execute: async ({ content, level, category, project_id }) => {
               if (!sb || !userId) return { saved: false, error: "Non authentifié" };
               if (level === "studio" && !studioId) return { saved: false, error: "Pas de studio rattaché" };
               if (level === "project" && !project_id && !projectId) return { saved: false, error: "project_id requis" };
@@ -177,7 +215,10 @@ export const Route = createFileRoute("/api/chat")({
                 studio_id: level === "studio" ? studioId : null,
                 project_id: level === "project" ? (project_id ?? projectId) : null,
                 level,
+                category: category ?? "general",
                 content,
+                freshness_score: 1.0,
+                is_active: true,
               });
               if (error) return { saved: false, error: error.message };
               return { saved: true };

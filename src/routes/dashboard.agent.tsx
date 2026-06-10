@@ -31,6 +31,7 @@ import {
   listConversations,
   deleteConversation,
 } from "@/lib/chat.functions";
+import { dreamMemorySynthesis, refreshTemporalMemories, generateMemorySummary } from "@/lib/dreaming.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -47,6 +48,9 @@ function AgentPage() {
   const loadFn = useServerFn(loadMessages);
   const saveFn = useServerFn(saveMessage);
   const resetFn = useServerFn(resetConversation);
+  const dreamFn = useServerFn(dreamMemorySynthesis);
+  const refreshFn = useServerFn(refreshTemporalMemories);
+  const summaryFn = useServerFn(generateMemorySummary);
 
   const [convId, setConvId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
@@ -54,8 +58,10 @@ function AgentPage() {
   const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const { id } = await ensureFn();
+      if (cancelled) return;
       const rows = await loadFn({ data: { conversationId: id } });
       const initial: UIMessage[] = rows.map((r) => ({
         id: r.id,
@@ -64,10 +70,22 @@ function AgentPage() {
       }));
       setConvId(id);
       setInitialMessages(initial);
+
+      // Trigger dreaming at conversation start (background, fire-and-forget)
+      if (rows.length < 2) {
+        // New conversation — run full synthesis + temporal refresh + summary
+        dreamFn({ data: { conversationId: id } }).catch(() => {});
+        refreshFn().catch(() => {});
+        summaryFn().catch(() => {});
+      } else {
+        // Existing conversation — just decay and refresh summary
+        refreshFn().catch(() => {});
+      }
     })().catch(() => {
-      setInitialMessages([]);
+      if (!cancelled) setInitialMessages([]);
     });
-  }, [ensureFn, loadFn]);
+    return () => { cancelled = true; };
+  }, [ensureFn, loadFn, dreamFn, refreshFn, summaryFn]);
 
   if (!initialMessages || !convId) {
     return (
@@ -145,6 +163,9 @@ function ChatInner({
   const suggestFn = useServerFn(generateSuggestions);
   const listFn = useServerFn(listConversations);
   const deleteFn = useServerFn(deleteConversation);
+  const dreamFn = useServerFn(dreamMemorySynthesis);
+  const refreshFn = useServerFn(refreshTemporalMemories);
+  const summaryFn = useServerFn(generateMemorySummary);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [conversations, setConversations] = useState<
@@ -190,6 +211,13 @@ function ChatInner({
         suggestFn({ data: { messages: recent } })
           .then((s) => setSuggestions(s))
           .catch(() => {});
+      }
+
+      // Periodic dreaming every 5 messages
+      const msgCount = messages.length;
+      if (msgCount > 0 && msgCount % 5 === 0) {
+        dreamFn({}).catch(() => {});
+        summaryFn().catch(() => {});
       }
     },
   });
