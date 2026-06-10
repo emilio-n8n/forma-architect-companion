@@ -30,14 +30,18 @@ import {
   generateSuggestions,
   listConversations,
   deleteConversation,
+  generateConversationTitle,
 } from "@/lib/chat.functions";
 import { dreamMemorySynthesis, refreshTemporalMemories, generateMemorySummary } from "@/lib/dreaming.functions";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { DocumentEditorPanel } from "@/components/DocumentEditorPanel";
+const DocumentEditorPanel = React.lazy(() =>
+  import("@/components/DocumentEditorPanel").then((m) => ({ default: m.DocumentEditorPanel }))
+);
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/agent")({
   component: AgentPage,
@@ -71,10 +75,17 @@ function AgentPage() {
       setConvId(id);
       setInitialMessages(initial);
 
-      // Trigger dreaming at conversation start (background, fire-and-forget)
+      // Trigger dreaming at conversation start with notification
       if (rows.length < 2) {
         // New conversation — run full synthesis + temporal refresh + summary
-        dreamFn({ data: { conversationId: id } }).catch(() => {});
+        dreamFn({ data: { conversationId: id } }).then((r) => {
+          if (!r) return;
+          const parts: string[] = [];
+          if (r.new_memories > 0) parts.push(`${r.new_memories} souvenirs`);
+          if (r.updates > 0) parts.push(`${r.updates} mis à jour`);
+          if (r.deactivated > 0) parts.push(`${r.deactivated} archivés`);
+          if (parts.length > 0) setTimeout(() => toast.success(`🧠 ${parts.join(", ")}`), 2000);
+        }).catch(() => {});
         refreshFn().catch(() => {});
         summaryFn().catch(() => {});
       } else {
@@ -131,10 +142,12 @@ function AgentPage() {
       </div>
       {showPanel && (
         <div className="flex-1 flex min-w-0">
-          <DocumentEditorPanel
-            content={activeContent}
-            onClose={() => { setActiveContent(null); setShowPanel(false); }}
-          />
+          <React.Suspense fallback={<div className="flex-1 flex items-center justify-center text-[#a3a3a3]"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+            <DocumentEditorPanel
+              content={activeContent}
+              onClose={() => { setActiveContent(null); setShowPanel(false); }}
+            />
+          </React.Suspense>
         </div>
       )}
     </div>
@@ -166,6 +179,7 @@ function ChatInner({
   const dreamFn = useServerFn(dreamMemorySynthesis);
   const refreshFn = useServerFn(refreshTemporalMemories);
   const summaryFn = useServerFn(generateMemorySummary);
+  const titleFn = useServerFn(generateConversationTitle);
   const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [conversations, setConversations] = useState<
@@ -213,10 +227,30 @@ function ChatInner({
           .catch(() => {});
       }
 
-      // Periodic dreaming every 5 messages
+      // Auto-title after first exchange
+      if (messages.length === 1 && text) {
+        const msgs = [...messages, message]
+          .map((m) => ({
+            role: m.role,
+            content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim(),
+          }))
+          .filter((m) => m.content.length > 0);
+        if (msgs.length >= 2) {
+          titleFn({ data: { conversationId: convId, messages: msgs } }).catch(() => {});
+        }
+      }
+
+      // Periodic dreaming every 5 messages with notification
       const msgCount = messages.length;
       if (msgCount > 0 && msgCount % 5 === 0) {
-        dreamFn({}).catch(() => {});
+        dreamFn({}).then((r) => {
+          if (!r) return;
+          const parts: string[] = [];
+          if (r.new_memories > 0) parts.push(`${r.new_memories} appris`);
+          if (r.updates > 0) parts.push(`${r.updates} mis à jour`);
+          if (r.deactivated > 0) parts.push(`${r.deactivated} archivés`);
+          if (parts.length > 0) toast.success(`🧠 ${parts.join(", ")}`);
+        }).catch(() => {});
         summaryFn().catch(() => {});
       }
     },

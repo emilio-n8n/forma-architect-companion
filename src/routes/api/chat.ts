@@ -15,22 +15,33 @@ Cite systématiquement les références au format **[RF: Article/Référence]** 
 Exemple : **[RF: DTU 13.3]** Fondations superficielles.
 
 ## OUTILS À TA DISPOSITION
-Tu disposes de 3 outils. Utilise-les de façon proactive, sans demander la permission :
+Tu disposes de 4 outils. Utilise-les de façon proactive, sans demander la permission :
 
 1. **search_memories(query)** — Consulte la mémoire (préférences perso, contexte projet, règles agence).
    Utilise-le AVANT chaque réponse non-triviale pour personnaliser.
+   L'ID retourné sert à référencer une mémoire existante pour la modifier.
 
 2. **web_search(query)** — Recherche web en temps réel via Exa.
    Utilise-le pour toute question d'actualité, réglementation récente, ou info externe.
    Reformule toi-même la requête : précise le domaine ("architecture", "PLU", "BTP"…)
    pour éviter les résultats hors-sujet. Cite les sources [1], [2]… dans ta réponse.
 
-3. **save_memory(content, level, project_id?)** — Mémorise une info importante.
+3. **save_memory(content, level, category?, project_id?)** — Mémorise une info importante.
    - level="project" : spécifique au projet en cours (nécessite project_id)
    - level="personal" : préférence de l'utilisateur
    - level="studio"  : règle/standard de l'agence
    Mémorise les préférences ("toujours signer par X"), contraintes projet, habitudes.
+   Vérifie D'ABORD avec search_memories si une mémoire similaire existe déjà. Si oui, utilise update_memory.
    N'enregistre PAS les trivialités ni les questions ponctuelles.
+
+4. **update_memory(memory_id, content, category?, freshness_score?)** — Met à jour une mémoire existante.
+   Utilise quand l'utilisateur corrige une info précédente ou précise une préférence.
+   Récupère d'abord l'ID via search_memories.
+
+## SUGGESTIONS PROACTIVES
+Quand tu détectes une information nouvelle et importante (préférence, contrainte, changement d'avis) :
+  → Demande d'abord à l'utilisateur "Tu veux que je retienne ça ?" avant d'utiliser save_memory.
+  → Sauf si l'utilisateur a dit "souviens-toi" ou "retiens" → sauvegarde directement.
 
 ## CRÉATION DE CONTENUS RICHES
 Quand on te demande un document, encadre-le dans \`\`\`doc … \`\`\` (markdown).
@@ -142,12 +153,12 @@ export const Route = createFileRoute("/api/chat")({
               if (keywords.length === 0) return { memories: [] };
               const conds = keywords.map((k) => `content.ilike.%${k}%`).join(",");
               const [personal, studio] = await Promise.all([
-                sb.from("memories").select("level, content, freshness_score, category")
+                sb.from("memories").select("id, level, content, freshness_score, category")
                   .eq("user_id", userId).eq("is_active", true)
                   .in("level", ["personal", "project"]).or(conds)
                   .order("freshness_score", { ascending: false }).limit(10),
                 studioId
-                  ? sb.from("memories").select("level, content, freshness_score, category")
+                  ? sb.from("memories").select("id, level, content, freshness_score, category")
                     .eq("level", "studio").eq("studio_id", studioId).eq("is_active", true)
                     .or(conds).order("freshness_score", { ascending: false }).limit(6)
                   : Promise.resolve({ data: [] as any[] }),
@@ -158,6 +169,7 @@ export const Route = createFileRoute("/api/chat")({
                 sb.from("memories").update({ last_accessed: new Date().toISOString() }).in("id", allIds).then(() => {});
               }
               const all = [...(personal.data ?? []), ...(studio.data ?? [])].map((m: any) => ({
+                id: m.id,
                 scope: m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO",
                 category: m.category,
                 freshness: m.freshness_score,
@@ -220,6 +232,26 @@ export const Route = createFileRoute("/api/chat")({
                 freshness_score: 1.0,
                 is_active: true,
               });
+              if (error) return { saved: false, error: error.message };
+              return { saved: true };
+            },
+          }),
+
+          update_memory: tool({
+            description:
+              "Met à jour une mémoire existante. Utilise après que l'utilisateur a corrigé ou précisé une info déjà mémorisée. Récupère l'ID de la mémoire via search_memories.",
+            inputSchema: z.object({
+              memory_id: z.string().describe("ID de la mémoire à modifier (retourné par search_memories)"),
+              content: z.string().min(5).max(500).describe("Nouveau contenu précis en 1 phrase"),
+              category: z.enum(["preferences", "projects", "work_style", "constraints", "general"]).optional().describe("Catégorie mise à jour"),
+              freshness_score: z.number().min(0).max(1).optional().describe("Fraîcheur : 1.0 = tout juste dit, 0.0 = périmé"),
+            }),
+            execute: async ({ memory_id, content, category, freshness_score }) => {
+              if (!sb || !userId) return { saved: false, error: "Non authentifié" };
+              const patch: Record<string, any> = { content, updated_at: new Date().toISOString() };
+              if (category !== undefined) patch.category = category;
+              if (freshness_score !== undefined) patch.freshness_score = freshness_score;
+              const { error } = await sb.from("memories").update(patch).eq("id", memory_id).eq("user_id", userId);
               if (error) return { saved: false, error: error.message };
               return { saved: true };
             },

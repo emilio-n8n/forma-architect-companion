@@ -325,3 +325,55 @@ export const searchWeb = createServerFn({ method: "POST" })
       return { error: "Erreur réseau Exa", answer: "", results: [], query: effectiveQuery };
     }
   });
+
+export const generateConversationTitle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      conversationId: z.string().uuid(),
+      messages: z.array(z.object({ role: z.string(), content: z.string() })).min(2),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const zenKey = process.env.ZEN_API_KEY;
+    if (!zenKey) return { title: null };
+
+    const convText = data.messages.map((m) =>
+      `[${m.role === "user" ? "USER" : "AI"}]: ${m.content.slice(0, 200)}`
+    ).join("\n");
+
+    const res = await fetch("https://opencode.ai/zen/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${zenKey}` },
+      body: JSON.stringify({
+        model: process.env.ZEN_MODEL || "nemotron-3-ultra-free",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Génère un titre court (max 6 mots) pour cette conversation d'architecture française. " +
+              "Réponds UNIQUEMENT par le titre, sans guillemets, sans point final.",
+          },
+          { role: "user", content: convText },
+        ],
+        temperature: 0.3,
+        max_tokens: 20,
+      }),
+    });
+    if (!res.ok) return { title: null };
+
+    const json = await res.json();
+    const title = (json.choices?.[0]?.message?.content ?? "").replace(/[""]/g, "").trim().slice(0, 100);
+    if (!title) return { title: null };
+
+    const { error } = await supabase
+      .from("conversations")
+      .update({ title })
+      .eq("id", data.conversationId)
+      .eq("user_id", userId);
+
+    if (error) return { title: null };
+    return { title };
+  });

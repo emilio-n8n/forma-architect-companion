@@ -386,3 +386,65 @@ export const reactivateMemory = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { success: true };
   });
+
+export const getMemoryStats = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: daily } = await supabase
+      .from("memories")
+      .select("created_at, freshness_score")
+      .eq("user_id", userId)
+      .gte("created_at", thirtyDaysAgo);
+
+    if (!daily) return { days: [], totals: { active: 0, inactive: 0, avg_freshness: 0 } };
+
+    const dayMap = new Map<string, { created: number; freshness_sum: number; count: number }>();
+    for (const m of daily) {
+      const day = (m.created_at ?? "").slice(0, 10);
+      if (!day) continue;
+      const entry = dayMap.get(day) ?? { created: 0, freshness_sum: 0, count: 0 };
+      entry.count++;
+      entry.freshness_sum += (m.freshness_score ?? 0);
+      dayMap.set(day, entry);
+    }
+
+    const days: Array<{ date: string; created: number; avg_freshness: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const stats = dayMap.get(d);
+      days.push({
+        date: d,
+        created: stats?.created ?? 0,
+        avg_freshness: stats ? Math.round((stats.freshness_sum / stats.count) * 100) / 100 : 0,
+      });
+    }
+
+    const { count: activeCount } = await supabase
+      .from("memories")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+
+    const { count: inactiveCount } = await supabase
+      .from("memories")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", false);
+
+    const avgFreshness = days.length > 0
+      ? Math.round((days.reduce((s, d) => s + d.avg_freshness, 0) / days.length) * 100) / 100
+      : 0;
+
+    return {
+      days,
+      totals: {
+        active: activeCount ?? 0,
+        inactive: inactiveCount ?? 0,
+        avg_freshness: avgFreshness,
+      },
+    };
+  });

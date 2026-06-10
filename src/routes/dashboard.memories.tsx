@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useServerFn } from "@tanstack/react-start";
-import { listMemories, deleteMemory, deactivateMemory, reactivateMemory } from "@/lib/memory.functions";
+import { listMemories, deleteMemory, deactivateMemory, reactivateMemory, getMemoryStats } from "@/lib/memory.functions";
 import { getMemorySummaries } from "@/lib/dreaming.functions";
 import { toast } from "sonner";
 import type { Memory } from "@/lib/memory.types";
 import type { MemorySummary } from "@/lib/dreaming.types";
 import { MemorySummaryCategoryLabels } from "@/lib/dreaming.types";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 export const Route = createFileRoute("/dashboard/memories")({
   component: MemoriesPage,
@@ -41,9 +42,12 @@ function MemoriesPage() {
   const deactivate = useServerFn(deactivateMemory);
   const reactivate = useServerFn(reactivateMemory);
   const getSummaries = useServerFn(getMemorySummaries);
+  const getStats = useServerFn(getMemoryStats);
 
   const [memories, setMemories] = useState<Memory[]>([]);
   const [summaries, setSummaries] = useState<MemorySummary[]>([]);
+  const [stats, setStats] = useState<{ days: any[]; totals: { active: number; inactive: number; avg_freshness: number } } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -77,6 +81,10 @@ function MemoriesPage() {
     load(filter === "all" ? undefined : filter);
     loadSummaries();
   }, [filter]);
+
+  useEffect(() => {
+    getStats().then(setStats).catch(() => {}).finally(() => setStatsLoading(false));
+  }, []);
 
   const handleDelete = async (id: string) => {
     try {
@@ -131,6 +139,31 @@ function MemoriesPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Timeline chart */}
+      {stats && !statsLoading && (
+        <Card className="p-4 mb-6 bg-[#1a1a1a] border-[#333]">
+          <h3 className="text-sm font-semibold text-[#e5e5e5] mb-3 flex items-center gap-2">
+            <BrainCircuit className="w-4 h-4 text-[#dcb383]" />
+            Évolution ({stats.totals.active} actives · {stats.totals.inactive} archivées · fraîcheur moy. {Math.round(stats.totals.avg_freshness * 100)}%)
+          </h3>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={stats.days}>
+              <defs>
+                <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#dcb383" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#dcb383" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#a3a3a3" }} tickFormatter={(v: string) => v.slice(5)} />
+              <YAxis tick={{ fontSize: 10, fill: "#a3a3a3" }} allowDecimals={false} width={30} />
+              <Tooltip contentStyle={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: "0.5rem", fontSize: "12px" }} />
+              <Area type="monotone" dataKey="created" stroke="#dcb383" fill="url(#memGrad)" strokeWidth={2} name="Nouvelles" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
       )}
 
       {/* Filters */}
