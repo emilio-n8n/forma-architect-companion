@@ -345,7 +345,7 @@ export const updateMemory = createServerFn({ method: "POST" })
 
     const { error } = await supabase
       .from("memories")
-      .update(patch)
+      .update(patch as any)
       .eq("id", data.memoryId)
       .eq("user_id", userId);
 
