@@ -4,7 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { DreamSynthesisResult, MemorySummary } from "./dreaming.types";
 
 const ZEN_BASE = "https://opencode.ai/zen/v1";
-const ZEN_MODEL = process.env.ZEN_MODEL || "nemotron-3-ultra-free";
+const ZEN_MODEL = process.env.ZEN_MODEL || "deepseek-v4-flash";
 const ZEN_KEY = () => process.env.ZEN_API_KEY;
 
 function callZen(system: string, user: string, temperature = 0.3) {

@@ -8,7 +8,7 @@ export function createZenProvider(apiKey: string) {
   });
 }
 
-export const ZEN_MODEL = process.env.ZEN_MODEL || "nemotron-3-ultra-free";
+export const ZEN_MODEL = process.env.ZEN_MODEL || "deepseek-v4-flash";
 
 export function createLovableAiGatewayProvider(apiKey: string) {
   return createOpenAICompatible({

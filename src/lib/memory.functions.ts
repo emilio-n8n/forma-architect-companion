@@ -218,9 +218,9 @@ export const saveMemoriesFromConversation = createServerFn({ method: "POST" })
       .eq("id", userId)
       .single();
 
-    // We use Mistral to extract important facts to remember
-    const mistralKey = process.env.MISTRAL_API_KEY;
-    if (!mistralKey) return { saved: 0 };
+    // We use Zen to extract important facts to remember
+    const zenKey = process.env.ZEN_API_KEY;
+    if (!zenKey) return { saved: 0 };
 
     const systemPrompt = `Tu es un assistant qui extrait des informations importantes à retenir d'une conversation.
 
@@ -250,11 +250,11 @@ Répond UNIQUEMENT avec un tableau JSON, jamais autre chose :
 
 Si rien à mémoriser, réponds []`;
 
-    const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    const res = await fetch("https://opencode.ai/zen/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${mistralKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${zenKey}` },
       body: JSON.stringify({
-        model: "mistral-small-latest",
+        model: process.env.ZEN_MODEL || "deepseek-v4-flash",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: data.content },

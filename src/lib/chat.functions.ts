@@ -193,7 +193,7 @@ export const generateSuggestions = createServerFn({ method: "POST" })
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: "nemotron-3-ultra-free",
+        model: "deepseek-v4-flash",
         messages: [
           {
             role: "system",
@@ -240,18 +240,18 @@ export const searchWeb = createServerFn({ method: "POST" })
 
     // 1. Réécrire la requête en tenant compte du contexte conversationnel
     let effectiveQuery = data.query;
-    const mistralKey = process.env.MISTRAL_API_KEY;
-    if (mistralKey && data.history && data.history.length > 0) {
+    const zenKey = process.env.ZEN_API_KEY;
+    if (zenKey && data.history && data.history.length > 0) {
       try {
         const ctx = data.history
           .slice(-6)
           .map((m) => `${m.role === "user" ? "Utilisateur" : "Assistant"}: ${m.content.slice(0, 600)}`)
           .join("\n");
-        const r = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        const r = await fetch("https://opencode.ai/zen/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${mistralKey}` },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${zenKey}` },
           body: JSON.stringify({
-            model: "mistral-small-latest",
+            model: process.env.ZEN_MODEL || "deepseek-v4-flash",
             messages: [
               {
                 role: "system",
@@ -348,7 +348,7 @@ export const generateConversationTitle = createServerFn({ method: "POST" })
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${zenKey}` },
       body: JSON.stringify({
-        model: process.env.ZEN_MODEL || "nemotron-3-ultra-free",
+        model: process.env.ZEN_MODEL || "deepseek-v4-flash",
         messages: [
           {
             role: "system",

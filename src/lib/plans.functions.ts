@@ -177,13 +177,13 @@ export type PlanVariant = {
 };
 
 async function callJSON<T>(prompt: string, system: string): Promise<T> {
-  const key = process.env.CEREBRAS_API_KEY;
-  if (!key) throw new Error("CEREBRAS_API_KEY missing");
-  const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+  const key = process.env.ZEN_API_KEY;
+  if (!key) throw new Error("ZEN_API_KEY missing");
+  const res = await fetch("https://opencode.ai/zen/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "gpt-oss-120b",
+      model: process.env.ZEN_MODEL || "deepseek-v4-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
