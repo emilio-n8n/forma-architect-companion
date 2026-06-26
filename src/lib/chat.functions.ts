@@ -31,7 +31,9 @@ export const ensureConversation = createServerFn({ method: "POST" })
 
 export const loadMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ conversationId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ conversationId: z.string().uuid(), limit: z.number().int().positive().optional() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     // ⭐ SECURITY: Vérifier que la conversation appartient à l'utilisateur (Broken Access Control fix)
@@ -48,9 +50,10 @@ export const loadMessages = createServerFn({ method: "POST" })
       .from("messages")
       .select("id, role, content, created_at")
       .eq("conversation_id", data.conversationId)
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .limit(data.limit ?? 50);
     if (error) throw new Error(error.message);
-    return rows ?? [];
+    return (rows ?? []).reverse();
   });
 
 export const saveMessage = createServerFn({ method: "POST" })

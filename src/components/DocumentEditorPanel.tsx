@@ -25,6 +25,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { SpreadsheetPreview } from "./SpreadsheetPreview";
 import { EmailPreview } from "./EmailPreview";
+import { toast } from "sonner";
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -357,7 +358,7 @@ export function DocumentEditorPanel({
   const handleShare = async () => {
     const shareText = `FORMA Agent — ${doc.title}\n\n${activeContent.slice(0, 500)}…`;
     if (navigator.share) {
-      await navigator.share({ text: shareText }).catch(() => {});
+      await navigator.share({ text: shareText }).catch((e) => { console.error("[navigator.share]", e); toast.error(e instanceof Error ? e.message : "Une erreur est survenue"); });
     } else {
       await navigator.clipboard.writeText(shareText);
       setShared(true);

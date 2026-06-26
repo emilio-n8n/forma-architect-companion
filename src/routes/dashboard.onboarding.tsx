@@ -61,7 +61,7 @@ function OnboardingPage() {
       if (existing) {
         navigate({ to: "/dashboard/agent" });
       }
-    }).catch(() => {});
+    }).catch((e) => { console.error("[getOnboarding]", e); toast.error(e instanceof Error ? e.message : "Une erreur est survenue"); });
   }, []);
 
   if (!showPicker) {

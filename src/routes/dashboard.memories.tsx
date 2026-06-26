@@ -83,7 +83,7 @@ function MemoriesPage() {
   }, [filter]);
 
   useEffect(() => {
-    getStats().then(setStats).catch(() => {}).finally(() => setStatsLoading(false));
+    getStats().then(setStats).catch((e) => { console.error("[getMemoryStats]", e); toast.error(e instanceof Error ? e.message : "Une erreur est survenue"); }).finally(() => setStatsLoading(false));
   }, []);
 
   const handleDelete = async (id: string) => {
