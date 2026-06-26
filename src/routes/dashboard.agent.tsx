@@ -3,6 +3,7 @@ import { type UIMessage } from "ai";
 import React, { useEffect, useState } from "react";
 import {
   Loader2,
+  X,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
