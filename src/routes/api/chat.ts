@@ -80,6 +80,18 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         // --- Auth + Supabase client per-request ---
+        const authHeader = request.headers.get("authorization");
+        if (!authHeader?.startsWith("Bearer ")) {
+          return new Response("Non authentifié", { status: 401 });
+        }
+        const SUPABASE_URL = process.env.SUPABASE_URL;
+        const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+        if (!SUPABASE_URL || !SUPABASE_KEY) {
+          console.error("[chat] SUPABASE_URL or SUPABASE_KEY missing");
+          return new Response("Server configuration error", { status: 500 });
+        }
+
+        const token = authHeader.replace("Bearer ", "");
         let userId: string | null = null;
         let sb: ReturnType<typeof createClient<Database>> | null = null;
         let studioId: string | null = null;
@@ -87,63 +99,58 @@ export const Route = createFileRoute("/api/chat")({
         let userContext = "";
 
         try {
-          const authHeader = request.headers.get("authorization");
-          const SUPABASE_URL = process.env.SUPABASE_URL;
-          const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
-          if (authHeader?.startsWith("Bearer ") && SUPABASE_URL && SUPABASE_KEY) {
-            const token = authHeader.replace("Bearer ", "");
-            sb = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
-              global: { headers: { Authorization: `Bearer ${token}` } },
-              auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+          sb = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
+            global: { headers: { Authorization: `Bearer ${token}` } },
+            auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+          });
+          const { data: claims } = await sb.auth.getClaims(token);
+          userId = (claims?.claims?.sub as string | undefined) ?? null;
+          if (!userId) {
+            return new Response("Token invalide", { status: 401 });
+          }
+
+          const [profileRes, onboardRes, summaryRes, memRes] = await Promise.all([
+            sb.from("profiles").select("studio_id").eq("id", userId).single(),
+            sb.from("onboarding_data").select("data").eq("user_id", userId).maybeSingle(),
+            sb.from("memory_summaries").select("category, summary").eq("user_id", userId),
+            sb.from("memories").select("content, level, category, freshness_score")
+              .eq("user_id", userId).eq("is_active", true)
+              .order("freshness_score", { ascending: false })
+              .order("created_at", { ascending: false })
+              .limit(10),
+          ]);
+          studioId = profileRes.data?.studio_id ?? null;
+
+          const parts: string[] = [];
+          const o = (onboardRes.data as { data?: Record<string, any> } | null)?.data;
+          if (o) {
+            if (o.first_name || o.last_name)
+              parts.push(`Collaborateur : ${o.first_name ?? ""} ${o.last_name ?? ""}${o.role ? ` (${o.role})` : ""}`.trim());
+            if (o.agency_name) parts.push(`Agence : ${o.agency_name}`);
+            if (o.comm_style) parts.push(`Style de communication : ${o.comm_style}`);
+            if (o.politeness_formula) parts.push(`Formule de politesse : "${o.politeness_formula}"`);
+            if (o.email_signature) parts.push(`Signature email :\n${o.email_signature}`);
+            if (o.specialties?.length) parts.push(`Spécialités : ${o.specialties.join(", ")}`);
+            if (o.approach) parts.push(`Approche : ${o.approach}`);
+            if (o.software?.length) parts.push(`Logiciels : ${o.software.join(", ")}`);
+          }
+          if (parts.length > 0) userContext = "## CONTEXTE UTILISATEUR\n" + parts.join("\n");
+
+          // Inject synthesized memory summaries
+          const summaries = summaryRes.data ?? [];
+          if (summaries.length > 0) {
+            const summaryLines = summaries.map((s: any) => `[${s.category}] : ${s.summary}`);
+            userContext += "\n\n## MÉMOIRE SYNTHÉTISÉE\n" + summaryLines.join("\n");
+          }
+
+          // Inject recent active memories
+          const recentMems = memRes.data ?? [];
+          if (recentMems.length > 0) {
+            const memLines = recentMems.slice(0, 8).map((m: any) => {
+              const scope = m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO";
+              return `[${scope}${m.category ? `/ ${m.category}` : ""}] ${m.content}`;
             });
-            const { data: claims } = await sb.auth.getClaims(token);
-            userId = (claims?.claims?.sub as string | undefined) ?? null;
-
-            if (userId) {
-              const [profileRes, onboardRes, summaryRes, memRes] = await Promise.all([
-                sb.from("profiles").select("studio_id").eq("id", userId).single(),
-                sb.from("onboarding_data").select("data").eq("user_id", userId).maybeSingle(),
-                sb.from("memory_summaries").select("category, summary").eq("user_id", userId),
-                sb.from("memories").select("content, level, category, freshness_score")
-                  .eq("user_id", userId).eq("is_active", true)
-                  .order("freshness_score", { ascending: false })
-                  .order("created_at", { ascending: false })
-                  .limit(10),
-              ]);
-              studioId = profileRes.data?.studio_id ?? null;
-
-              const parts: string[] = [];
-              const o = (onboardRes.data as { data?: Record<string, any> } | null)?.data;
-              if (o) {
-                if (o.first_name || o.last_name)
-                  parts.push(`Collaborateur : ${o.first_name ?? ""} ${o.last_name ?? ""}${o.role ? ` (${o.role})` : ""}`.trim());
-                if (o.agency_name) parts.push(`Agence : ${o.agency_name}`);
-                if (o.comm_style) parts.push(`Style de communication : ${o.comm_style}`);
-                if (o.politeness_formula) parts.push(`Formule de politesse : "${o.politeness_formula}"`);
-                if (o.email_signature) parts.push(`Signature email :\n${o.email_signature}`);
-                if (o.specialties?.length) parts.push(`Spécialités : ${o.specialties.join(", ")}`);
-                if (o.approach) parts.push(`Approche : ${o.approach}`);
-                if (o.software?.length) parts.push(`Logiciels : ${o.software.join(", ")}`);
-              }
-              if (parts.length > 0) userContext = "## CONTEXTE UTILISATEUR\n" + parts.join("\n");
-
-              // Inject synthesized memory summaries
-              const summaries = summaryRes.data ?? [];
-              if (summaries.length > 0) {
-                const summaryLines = summaries.map((s: any) => `[${s.category}] : ${s.summary}`);
-                userContext += "\n\n## MÉMOIRE SYNTHÉTISÉE\n" + summaryLines.join("\n");
-              }
-
-              // Inject recent active memories
-              const recentMems = memRes.data ?? [];
-              if (recentMems.length > 0) {
-                const memLines = recentMems.slice(0, 8).map((m: any) => {
-                  const scope = m.level === "studio" ? "AGENCE" : m.level === "project" ? "PROJET" : "PERSO";
-                  return `[${scope}${m.category ? `/ ${m.category}` : ""}] ${m.content}`;
-                });
-                userContext += "\n\n## SOUVENIRS RÉCENTS\n" + memLines.join("\n");
-              }
-            }
+            userContext += "\n\n## SOUVENIRS RÉCENTS\n" + memLines.join("\n");
           }
         } catch (e) {
           console.error("[chat] auth/context error:", e);
