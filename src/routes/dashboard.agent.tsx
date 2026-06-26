@@ -19,6 +19,7 @@ import {
   Search,
   Brain,
   Bookmark,
+  Code,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -39,6 +40,9 @@ import { Separator } from "@/components/ui/separator";
 const DocumentEditorPanel = React.lazy(() =>
   import("@/components/DocumentEditorPanel").then((m) => ({ default: m.DocumentEditorPanel }))
 );
+const CodePreview = React.lazy(() =>
+  import("@/components/CodePreview").then((m) => ({ default: m.CodePreview }))
+);
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
@@ -58,7 +62,7 @@ function AgentPage() {
 
   const [convId, setConvId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[] | null>(null);
-  const [activeContent, setActiveContent] = useState<{ type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null>(null);
+  const [activeContent, setActiveContent] = useState<{ type: "doc" | "spreadsheet" | "email" | "code"; title: string; content: string } | null>(null);
   const [showPanel, setShowPanel] = useState(true);
 
   useEffect(() => {
@@ -143,10 +147,27 @@ function AgentPage() {
       {showPanel && (
         <div className="flex-1 flex min-w-0">
           <React.Suspense fallback={<div className="flex-1 flex items-center justify-center text-[#a3a3a3]"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
-            <DocumentEditorPanel
-              content={activeContent}
-              onClose={() => { setActiveContent(null); setShowPanel(false); }}
-            />
+            {activeContent?.type === "code" ? (
+              <div className="flex-1 bg-[#171717] rounded-[24px] border border-[#333] flex flex-col overflow-hidden">
+                <header className="flex items-center justify-between gap-4 px-6 py-3 border-b border-[#333] bg-[#171717]">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="text-[10px] uppercase tracking-wider text-[#dcb383] bg-[#dcb383]/10 px-2 py-0.5 rounded-full shrink-0">Code</span>
+                    <span className="text-[#e5e5e5] font-medium truncate">{activeContent.title}</span>
+                  </div>
+                  <button className="hover:text-[#e5e5e5] p-1.5 rounded-lg hover:bg-[#262626] transition-colors" onClick={() => { setActiveContent(null); setShowPanel(false); }}>
+                    <X className="w-4 h-4" />
+                  </button>
+                </header>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <CodePreview json={activeContent.content} />
+                </div>
+              </div>
+            ) : (
+              <DocumentEditorPanel
+                content={activeContent}
+                onClose={() => { setActiveContent(null); setShowPanel(false); }}
+              />
+            )}
           </React.Suspense>
         </div>
       )}
@@ -169,7 +190,7 @@ function ChatInner({
   onSave: (role: "user" | "assistant", content: string) => void;
   onReset: () => void;
   onSwitchConversation: (id: string) => Promise<void>;
-  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
+  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email" | "code"; title: string; content: string } | null) => void;
   showPanel: boolean;
   onTogglePanel: () => void;
 }) {
@@ -510,6 +531,22 @@ function ChatInner({
                   <Share2 className="w-4 h-4" />
                 </button>
               </div>
+
+              {idx === messages.length - 1 && status !== "streaming" && isTruncated(text) && (
+                <button
+                  onClick={() => {
+                    const lastUser = [...messages].reverse().find((msg) => msg.role === "user");
+                    if (lastUser) {
+                      const txt = lastUser.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+                      sendMessage({ text: txt + "\n\nContinue la réponse précédente à partir de là où tu t'es arrêté. Termine tous les blocs ouverts." });
+                    }
+                  }}
+                  className="self-start text-xs px-3 py-1.5 border border-[#dcb383]/40 rounded-full text-[#dcb383] hover:bg-[#dcb383]/10 transition-colors flex items-center gap-1.5 mt-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Continuer la génération (bloc tronqué)
+                </button>
+              )}
             </div>
           );
         })}
@@ -573,6 +610,17 @@ function ChatInner({
                 <PenLine className="w-3.5 h-3.5 text-[#dcb383]" />
                 Canvas
               </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 bg-[#2a2a2a] border border-[#3f3f3f] text-xs px-2.5 py-1 rounded-full text-[#a3a3a3] hover:text-[#e5e5e5] transition-colors"
+                title="Nouveau code"
+                onClick={() => {
+                  onOpenContent({ type: "code", title: "Nouveau code", content: JSON.stringify({ html: "<h1>Bonjour</h1>", css: "body{font-family:sans-serif;padding:2rem}", js: "console.log('ready')", title: "Nouveau code" }, null, 2) });
+                }}
+              >
+                <Code className="w-3.5 h-3.5 text-[#dcb383]" />
+                Code
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -597,7 +645,7 @@ function ReactMarkdownContent({
   messageIdx,
 }: {
   text: string;
-  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email"; title: string; content: string } | null) => void;
+  onOpenContent: (content: { type: "doc" | "spreadsheet" | "email" | "code"; title: string; content: string } | null) => void;
   messageIdx: number;
 }) {
   const renderers: import("react-markdown").Components = {
@@ -686,6 +734,27 @@ function ReactMarkdownContent({
           </div>
         );
       }
+      if (!isInline && lang === "code") {
+        let title = "Code";
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed.title) title = parsed.title;
+        } catch {}
+        return (
+          <div
+            className="border border-[#333] rounded-2xl p-4 flex items-center gap-3 bg-[#171717] cursor-pointer hover:bg-[#1e1e1e] transition-colors my-3"
+            onClick={() => onOpenContent({ type: "code", title, content })}
+          >
+            <div className="text-[#a3a3a3]">
+              <Code className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-[#e5e5e5] text-sm truncate">{title}</h4>
+              <p className="text-xs text-[#a3a3a3] mt-0.5">Code HTML/CSS/JS · cliquer pour ouvrir</p>
+            </div>
+          </div>
+        );
+      }
       if (isInline) {
         return (
           <code className="text-[#dcb383] bg-[#222] px-1 py-0.5 rounded text-sm" {...props}>
@@ -736,6 +805,12 @@ function ReactMarkdownContent({
       </ReactMarkdown>
     </div>
   );
+}
+
+function isTruncated(text: string): boolean {
+  const openCount = (text.match(/```(doc|spreadsheet|email|code)\b/g) || []).length;
+  const closeCount = (text.match(/```$/gm) || []).length;
+  return openCount > closeCount;
 }
 
 function ToolActivity({ parts }: { parts: UIMessage["parts"] }) {

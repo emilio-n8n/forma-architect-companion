@@ -46,7 +46,17 @@ Quand tu détectes une information nouvelle et importante (préférence, contrai
 ## CRÉATION DE CONTENUS RICHES
 Quand on te demande un document, encadre-le dans \`\`\`doc … \`\`\` (markdown).
 Pour un tableau de données : \`\`\`spreadsheet { "title":"…", "columns":[…], "rows":[…] } \`\`\`.
-Pour un email : \`\`\`email { "to":"…", "subject":"…", "body":"…" } \`\`\`.`;
+Pour un email : \`\`\`email { "to":"…", "subject":"…", "body":"…" } \`\`\`.
+Pour illustrer une idée avec un mini site web (HTML/CSS/JS) : \`\`\`code { "title":"…", "html":"…", "css":"…", "js":"…" } \`\`\`.
+  - Le HTML va dans le body (sans wrapper), le CSS est brut, le JS est brut (sans balises script).
+  - Utilise-le pour montrer des concepts visuels, des interfaces, des animations, des dataviz.
+  - Le résultat s'affiche dans un iframe sandboxé — tu peux utiliser n'importe quelle librairie via CDN (<script src="..."> dans le HTML).
+  - Préfère du code concis et autonome. Pense mobile-first.
+
+## RÈGLE CRITIQUE — COMPLétude des blocs
+Tu DOIS toujours fermer les blocs \`\`\`doc, \`\`\`spreadsheet, \`\`\`email, \`\`\`code que tu ouvres.
+Ne laisse jamais un bloc ouvert à la fin de ta réponse. Si tu n'as pas fini, termine d'abord le bloc puis continue.
+Un bloc tronqué est inutilisable — mieux vaut répondre moins de contenu mais complet.`;
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -270,7 +280,7 @@ export const Route = createFileRoute("/api/chat")({
           system: fullSystem,
           messages: await convertToModelMessages(messages as UIMessage[]),
           tools,
-          stopWhen: stepCountIs(50),
+          stopWhen: stepCountIs(100),
         });
 
         return result.toUIMessageStreamResponse({
