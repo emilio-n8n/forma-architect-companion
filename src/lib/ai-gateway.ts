@@ -17,11 +17,3 @@ export function createLovableAiGatewayProvider(apiKey: string) {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 }
-
-export function createMistralProvider(apiKey: string) {
-  return createOpenAICompatible({
-    name: "mistral",
-    baseURL: "https://api.mistral.ai/v1",
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-}
