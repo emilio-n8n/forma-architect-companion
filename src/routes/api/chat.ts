@@ -87,8 +87,16 @@ export const Route = createFileRoute("/api/chat")({
         const SUPABASE_URL = process.env.SUPABASE_URL;
         const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
         if (!SUPABASE_URL || !SUPABASE_KEY) {
-          console.error("[chat] SUPABASE_URL or SUPABASE_KEY missing");
-          return new Response("Server configuration error", { status: 500 });
+          const missing = [
+            ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
+            ...(!SUPABASE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
+          ];
+          const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
+          console.error(`[chat] ${message}`);
+          return new Response(JSON.stringify({ error: message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+          });
         }
 
         const token = authHeader.replace("Bearer ", "");
